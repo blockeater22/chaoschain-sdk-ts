@@ -102,7 +102,6 @@ export type {
   ComputeProvider,
   
   // Network
-  NetworkConfig,
   ContractAddresses,
   
   // Process Integrity
@@ -117,6 +116,7 @@ export type {
 // Enums
 // ============================================================================
 export { 
+  NetworkConfig,
   AgentRole,
   ValidationStatus
   // PaymentMethod // Not defined in types.ts yet
@@ -152,7 +152,7 @@ export {
 // ============================================================================
 // Version Info
 // ============================================================================
-export const SDK_VERSION = '0.1.0';
+export const SDK_VERSION = '0.1.2';
 export const ERC8004_VERSION = '1.0';
 export const X402_VERSION = '1.0';
 
