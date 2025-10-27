@@ -13,7 +13,6 @@ import {
   ValidationRequest,
   ValidationStatus,
   ContractAddresses,
-  TransactionResult,
 } from './types';
 import {
   IDENTITY_REGISTRY_ABI,

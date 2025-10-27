@@ -7,7 +7,7 @@ import { ethers } from 'ethers';
 import { WalletConfig } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as // crypto from 'crypto';
+// import * as crypto from 'crypto';
 
 export class WalletManager {
   private wallet: ethers.Wallet | ethers.HDNodeWallet;

@@ -7,7 +7,7 @@
 
 import * as http from 'http';
 import { X402PaymentManager, X402PaymentProof } from './X402PaymentManager';
-import { PaymentError } from './exceptions';
+// import { PaymentError } from './exceptions';
 
 export interface X402EndpointConfig {
   path: string;

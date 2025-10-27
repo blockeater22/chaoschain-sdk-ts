@@ -7,7 +7,7 @@
 
 import { ethers } from 'ethers';
 import axios from 'axios';
-import { PaymentError } from './exceptions';
+// import { PaymentError } from './exceptions';
 import { NetworkConfig } from './types';
 
 export enum PaymentMethod {
@@ -128,7 +128,7 @@ export class PaymentManager {
     paymentMethod: PaymentMethod,
     amount: number,
     currency: string,
-    paymentData: Record<string, any>
+    paymentData_unused: Record<string, any>
   ): TraditionalPaymentResult {
     console.log(`💳 Processing ${paymentMethod} payment: $${amount} ${currency}`);
 
@@ -157,7 +157,7 @@ export class PaymentManager {
   /**
    * Process Basic Card payment (Visa, Mastercard, Amex, etc.) via Stripe
    */
-  private processBasicCard(amount: number, currency: string, paymentData: Record<string, any>): TraditionalPaymentResult {
+  private processBasicCard(amount: number, currency: string, paymentData_unused: Record<string, any>): TraditionalPaymentResult {
     console.log('💳 Processing Basic Card via Stripe...');
 
     // Check if Stripe is configured
@@ -185,7 +185,7 @@ export class PaymentManager {
   /**
    * Process Google Pay payment
    */
-  private processGooglePay(amount: number, currency: string, paymentData: Record<string, any>): TraditionalPaymentResult {
+  private processGooglePay(amount: number, currency: string, paymentData_unused: Record<string, any>): TraditionalPaymentResult {
     console.log('🅶  Processing Google Pay...');
 
     // Check if Google Pay is configured
@@ -205,7 +205,7 @@ export class PaymentManager {
   /**
    * Process Apple Pay payment
    */
-  private processApplePay(amount: number, currency: string, paymentData: Record<string, any>): TraditionalPaymentResult {
+  private processApplePay(amount: number, currency: string, paymentData_unused: Record<string, any>): TraditionalPaymentResult {
     console.log('🍎 Processing Apple Pay...');
 
     // Check if Apple Pay is configured
@@ -225,7 +225,7 @@ export class PaymentManager {
   /**
    * Process PayPal payment
    */
-  private processPayPal(amount: number, currency: string, paymentData: Record<string, any>): TraditionalPaymentResult {
+  private processPayPal(amount: number, currency: string, paymentData_unused: Record<string, any>): TraditionalPaymentResult {
     console.log('💙 Processing PayPal...');
 
     // Check if PayPal is configured
@@ -262,7 +262,7 @@ export class PaymentManager {
   /**
    * Process A2A-x402 crypto payment
    */
-  private processA2AX402(amount: number, currency: string, paymentData: Record<string, any>): TraditionalPaymentResult {
+  private processA2AX402(amount: number, currency: string, paymentData_unused: Record<string, any>): TraditionalPaymentResult {
     console.log('🔗 Processing A2A-x402 crypto payment...');
 
     // Crypto payments are handled by X402PaymentManager

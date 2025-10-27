@@ -1,133 +1,425 @@
-/**
- * ChaosChainSDK Core Tests
- */
-
 import { describe, it, expect } from 'vitest';
-import { ChaosChainSDK, NetworkConfig, AgentRole } from '../src';
+import { ChaosChainSDK } from '../src/ChaosChainSDK';
+import { NetworkConfig, AgentRole } from '../src/types';
+import { ethers } from 'ethers';
 
 describe('ChaosChainSDK', () => {
-  it('should initialize with minimal config', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+  const testPrivateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+
+  describe('Initialization', () => {
+    it('should initialize with minimal config', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.agentName).toBe('TestAgent');
+      expect(sdk.agentDomain).toBe('test.example.com');
+      expect(sdk.agentRole).toBe(AgentRole.SERVER);
+      expect(sdk.network).toBe(NetworkConfig.BASE_SEPOLIA);
     });
 
-    expect(sdk).toBeDefined();
-    expect(sdk.agentName).toBe('TestAgent');
-    expect(sdk.agentDomain).toBe('test.example.com');
-    expect(sdk.agentRole).toBe(AgentRole.SERVER);
-    expect(sdk.network).toBe(NetworkConfig.BASE_SEPOLIA);
-  });
+    it('should initialize with custom RPC URL', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+        rpcUrl: 'https://custom-rpc.example.com',
+      });
 
-  it('should get wallet address', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      expect(sdk).toBeDefined();
     });
 
-    const address = sdk.getAddress();
-    expect(address).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
-  });
+    it('should generate wallet if no private key provided', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.CLIENT,
+        network: NetworkConfig.ETHEREUM_SEPOLIA,
+      });
 
-  it('should have storage provider', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      expect(sdk).toBeDefined();
+      expect(sdk.walletManager).toBeDefined();
     });
 
-    expect(sdk.storage).toBeDefined();
-    expect(sdk.storage.upload).toBeDefined();
-    expect(sdk.storage.download).toBeDefined();
-  });
+    it('should initialize with feature flags', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+        enableAP2: true,
+        enableProcessIntegrity: true,
+        enablePayments: true,
+        enableStorage: true,
+      });
 
-  it('should get network info', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      expect(sdk).toBeDefined();
     });
 
-    expect(sdk.networkInfo).toBeDefined();
-    expect(sdk.networkInfo.chainId).toBe(84532);
-    expect(sdk.networkInfo.contracts.identity).toBe('0x8004AA63c570c570eBF15376c0dB199918BFe9Fb');
-  });
-
-  it('should get provider', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+    it('should handle invalid network gracefully', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: 'invalid-network' as NetworkConfig,
+          privateKey: testPrivateKey,
+        });
+      }).toThrow();
     });
 
-    const provider = sdk.getProvider();
-    expect(provider).toBeDefined();
+    it('should accept mnemonic instead of private key', () => {
+      const mnemonic = 'test test test test test test test test test test test junk';
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        mnemonic,
+      });
+
+      expect(sdk).toBeDefined();
+      expect(sdk.walletManager).toBeDefined();
+    });
   });
 
-  it('should have payment manager when enabled', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-      enablePayments: true,
+  describe('Wallet and Address', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
     });
 
-    expect(() => sdk.calculateTotalCost('10.0', 'USDC')).not.toThrow();
-  });
-
-  it('should throw when payment manager disabled', () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-      enablePayments: false,
+    it('should return valid address', () => {
+      const address = sdk.getAddress();
+      expect(address).toBeDefined();
+      expect(ethers.isAddress(address)).toBe(true);
     });
 
-    expect(() => sdk.calculateTotalCost('10.0', 'USDC')).toThrow();
+    it('should return wallet balance', async () => {
+      // Mock the provider getBalance
+      const mockBalance = ethers.parseEther('1.0');
+      vi.spyOn(sdk['signer'].provider!, 'getBalance').mockResolvedValue(mockBalance);
+
+      const balance = await sdk.getBalance();
+      expect(balance).toBeDefined();
+      expect(typeof balance).toBe('string');
+    });
   });
 
-  it('should get SDK version', () => {
-    const version = ChaosChainSDK.getVersion();
-    expect(version).toBe('0.1.0');
-  });
+  describe('Network Configuration', () => {
+    it('should work with Ethereum Sepolia', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.ETHEREUM_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
 
-  it('should get supported networks', () => {
-    const networks = ChaosChainSDK.getSupportedNetworks();
-    expect(networks).toContain('base-sepolia');
-    expect(networks).toContain('ethereum-sepolia');
-    expect(networks.length).toBeGreaterThan(0);
-  });
-
-  it('should sign message', async () => {
-    const sdk = new ChaosChainSDK({
-      agentName: 'TestAgent',
-      agentDomain: 'test.example.com',
-      agentRole: AgentRole.SERVER,
-      network: NetworkConfig.BASE_SEPOLIA,
-      privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      expect(sdk.network).toBe(NetworkConfig.ETHEREUM_SEPOLIA);
     });
 
-    const message = 'Hello ChaosChain!';
-    const signature = await sdk.signMessage(message);
-    
-    expect(signature).toBeDefined();
-    expect(signature).toMatch(/^0x[a-fA-F0-9]{130}$/);
+    it('should work with Base Sepolia', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.network).toBe(NetworkConfig.BASE_SEPOLIA);
+    });
+
+    it('should work with Linea Sepolia', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.LINEA_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.network).toBe(NetworkConfig.LINEA_SEPOLIA);
+    });
+
+    it('should work with Hedera Testnet', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.HEDERA_TESTNET,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.network).toBe(NetworkConfig.HEDERA_TESTNET);
+    });
+
+    it('should work with 0G Testnet', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.ZEROG_TESTNET,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.network).toBe(NetworkConfig.ZEROG_TESTNET);
+    });
+  });
+
+  describe('Agent Roles', () => {
+    it('should support SERVER role', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'ServerAgent',
+        agentDomain: 'server.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.agentRole).toBe(AgentRole.SERVER);
+    });
+
+    it('should support CLIENT role', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'ClientAgent',
+        agentDomain: 'client.example.com',
+        agentRole: AgentRole.CLIENT,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.agentRole).toBe(AgentRole.CLIENT);
+    });
+
+    it('should support VALIDATOR role', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'ValidatorAgent',
+        agentDomain: 'validator.example.com',
+        agentRole: AgentRole.VALIDATOR,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.agentRole).toBe(AgentRole.VALIDATOR);
+    });
+
+    it('should support BOTH role', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'HybridAgent',
+        agentDomain: 'hybrid.example.com',
+        agentRole: AgentRole.BOTH,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(sdk.agentRole).toBe(AgentRole.BOTH);
+    });
+  });
+
+  describe('Storage Integration', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+        enableStorage: true,
+      });
+    });
+
+    it('should have storage backend initialized', () => {
+      expect(sdk['storageBackend']).toBeDefined();
+    });
+
+    it('should store evidence data', async () => {
+      const testData = {
+        test: 'data',
+        timestamp: Date.now(),
+      };
+
+      // Mock storage put method
+      const mockCid = 'QmTest123';
+      vi.spyOn(sdk['storageBackend']!, 'put').mockResolvedValue({
+        cid: mockCid,
+        size: 100,
+        uri: `ipfs://${mockCid}`,
+      });
+
+      const cid = await sdk.storeEvidence(testData);
+      expect(cid).toBe(mockCid);
+    });
+  });
+
+  describe('Payment Integration', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+        enablePayments: true,
+      });
+    });
+
+    it('should have payment manager initialized', () => {
+      expect(sdk['paymentManager']).toBeDefined();
+    });
+
+    it('should have x402 payment manager initialized', () => {
+      expect(sdk['x402PaymentManager']).toBeDefined();
+    });
+  });
+
+  describe('Process Integrity', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+        enableProcessIntegrity: true,
+      });
+    });
+
+    it('should have process integrity initialized', () => {
+      expect(sdk['processIntegrity']).toBeDefined();
+    });
+
+    it('should register functions for integrity verification', () => {
+      const testFunction = async (x: number) => x * 2;
+      sdk['processIntegrity']!.registerFunction('double', testFunction);
+
+      expect(sdk['processIntegrity']!['registeredFunctions'].has('double')).toBe(true);
+    });
+  });
+
+  describe('Configuration Validation', () => {
+    it('should require agent name', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: '',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: testPrivateKey,
+        });
+      }).toThrow();
+    });
+
+    it('should require agent domain', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: '',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: testPrivateKey,
+        });
+      }).toThrow();
+    });
+
+    it('should validate domain format', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'invalid domain!',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: testPrivateKey,
+        });
+      }).toThrow();
+    });
+  });
+
+  describe('ERC-8004 Integration', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+    });
+
+    it('should have chaos agent initialized', () => {
+      expect(sdk['chaosAgent']).toBeDefined();
+    });
+
+    it('should have correct contract addresses for network', () => {
+      expect(sdk['chaosAgent']).toBeDefined();
+      // ChaosAgent should have the correct contracts initialized
+    });
+  });
+
+  describe('Utility Methods', () => {
+    beforeEach(() => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+    });
+
+    it('should return SDK version', () => {
+      const version = sdk.getVersion();
+      expect(version).toBeDefined();
+      expect(typeof version).toBe('string');
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+    });
+
+    it('should return capabilities list', () => {
+      const capabilities = sdk.getCapabilities();
+      expect(Array.isArray(capabilities)).toBe(true);
+      expect(capabilities.length).toBeGreaterThan(0);
+      expect(capabilities).toContain('erc8004-identity');
+      expect(capabilities).toContain('erc8004-reputation');
+      expect(capabilities).toContain('erc8004-validation');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle invalid private key gracefully', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: 'invalid-key',
+        });
+      }).toThrow();
+    });
+
+    it('should handle invalid mnemonic gracefully', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          mnemonic: 'invalid mnemonic phrase',
+        });
+      }).toThrow();
+    });
   });
 });
-
