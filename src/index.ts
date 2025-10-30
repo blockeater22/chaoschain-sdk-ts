@@ -23,6 +23,7 @@ export { ChaosAgent } from './ChaosAgent';
 export { X402PaymentManager } from './X402PaymentManager';
 export { PaymentManager } from './PaymentManager';
 export { X402Server } from './X402Server';
+export { X402Facilitator } from './X402Facilitator';
 
 // ============================================================================
 // Advanced Integrations
@@ -111,6 +112,16 @@ export type {
   // Transaction
   TransactionResult,
 } from './types';
+
+// X402 Facilitator Types
+export type {
+  VerifyRequest,
+  VerifyResponse,
+  SettleRequest,
+  SettleResponse,
+  SupportedSchemesResponse,
+  X402FacilitatorConfig
+} from './X402Facilitator';
 
 // ============================================================================
 // Enums
