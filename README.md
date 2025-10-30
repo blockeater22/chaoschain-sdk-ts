@@ -56,7 +56,7 @@ console.log(`✅ Agent #${agentId} registered on-chain`);
 
 // 2. Execute x402 payment
 const payment = await sdk.executeX402Payment({
-  toAgent: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1',
+  toAgent: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70',
   amount: '1.5',
   currency: 'USDC'
 });
@@ -150,7 +150,7 @@ Native integration with Coinbase's x402 HTTP 402 protocol:
 ```typescript
 // Execute payment
 const payment = await sdk.executeX402Payment({
-  toAgent: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1',
+  toAgent: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70',
   amount: '10.0',
   currency: 'USDC',
   serviceType: 'ai_analysis'

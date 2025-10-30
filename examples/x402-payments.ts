@@ -50,7 +50,7 @@ async function main() {
   /*
   console.log('\n💸 Executing x402 payment...');
   const payment = await sdk.executeX402Payment({
-    toAgent: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1', // Replace with recipient
+    toAgent: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70', // Replace with recipient
     amount: '1.0',
     currency: 'USDC',
     serviceType: 'analysis',
