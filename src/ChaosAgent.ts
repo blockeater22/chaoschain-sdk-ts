@@ -19,6 +19,8 @@ import {
   REPUTATION_REGISTRY_ABI,
   VALIDATION_REGISTRY_ABI,
 } from './utils/contracts';
+import path from 'path';
+import fs from 'fs';
 
 export class ChaosAgent {
   private identityContract: ethers.Contract;
@@ -111,13 +113,13 @@ export class ChaosAgent {
       if (uri.startsWith('ipfs://')) {
         const cid = uri.substring(7);
         const response = await fetch(`https://ipfs.io/ipfs/${cid}`);
-        return response.json();
+        return response.json() as Promise<AgentMetadata>;
       }
 
       // Parse https:// URI
       if (uri.startsWith('https://') || uri.startsWith('http://')) {
         const response = await fetch(uri);
-        return response.json();
+        return response.json() as Promise<AgentMetadata>;
       }
 
       return null;
@@ -561,6 +563,33 @@ export class ChaosAgent {
    */
   async getValidationIdentityRegistry(): Promise<string> {
     return this.validationContract.getIdentityRegistry();
+  }
+
+  // ============================================================================
+  // Cache Implementation
+  // ============================================================================
+  private getCachedFilePath(): string {
+    return path.join(process.cwd(), 'chaoschain_agent_ids.json');
+  }
+
+  private loadAgentIdFromCache(chainId: number, wallet: string): bigint | null {
+    const cacheFile = this.getCachedFilePath();
+    if (!fs.existsSync(cacheFile)) return null;
+    const cacheData = fs.readFileSync(cacheFile, 'utf-8');
+    const cache = JSON.parse(cacheData);
+    return cache[chainId]?.[wallet]?.agentId || null;
+  }
+
+  private saveAgentIdTocache(chainId: number, wallet: string, agentId: bigint, domain?: string): void {
+    const cacheFile = this.getCachedFilePath();
+    const cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) : {};
+    cache[String(chainId)] = cache[String(chainId)] ?? {};
+    cache[String(chainId)][wallet.toLowerCase()] = {
+      agentId,
+      timestamp: new Date().toISOString(),
+      domain,
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
   }
 
   // ============================================================================

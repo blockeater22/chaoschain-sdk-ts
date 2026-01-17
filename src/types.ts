@@ -431,6 +431,9 @@ export interface PaymentProof {
   network?: string;
 }
 
+/**
+ * Proof of Validation Execution
+ */
 export interface ValidationResult {
   validationId: string;
   validatorAgentId: string;
