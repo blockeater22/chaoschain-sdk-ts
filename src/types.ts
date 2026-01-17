@@ -61,6 +61,9 @@ export interface ContractAddresses {
   identity: string;
   reputation: string;
   validation: string;
+  rewardsDistributor: string | null;
+  chaosCore: string | null;
+  network: NetworkConfig | null;
 }
 
 /**
