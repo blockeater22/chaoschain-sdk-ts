@@ -24,14 +24,14 @@ try {
     enablePayments: false,
     enableAP2: false,
     enableProcessIntegrity: false,
-    enableStorage: false
+    enableStorage: false,
   });
-  
+
   console.log('\n✅ Test 3: SDK initialization works');
   console.log(`   Agent Name: ${sdk.agentName}`);
   console.log(`   Network: ${sdk.network}`);
   console.log(`   Wallet: ${sdk.getAddress().substring(0, 10)}...`);
-  
+
   // Test 4: Check capabilities
   const caps = sdk.getCapabilities();
   console.log('\n✅ Test 4: SDK capabilities');
@@ -39,10 +39,9 @@ try {
   console.log(`   ERC-8004 Identity: ${caps.features.erc_8004_identity}`);
   console.log(`   ERC-8004 Reputation: ${caps.features.erc_8004_reputation}`);
   console.log(`   ERC-8004 Validation: ${caps.features.erc_8004_validation}`);
-  
+
   console.log('\n🎉 All tests passed! SDK is ready for production.\n');
   process.exit(0);
-  
 } catch (error) {
   console.error('\n❌ Test failed:', error.message);
   process.exit(1);

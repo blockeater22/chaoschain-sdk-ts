@@ -47,11 +47,11 @@ export interface ComputeProvider {
 
 /**
  * Production-ready process integrity verifier for ChaosChain agents.
- * 
+ *
  * Provides dual-layer cryptographic proof:
  * 1. Local code hashing (SHA-256 of function code)
  * 2. Optional TEE attestations (hardware-verified execution from 0G Compute, AWS Nitro, etc.)
- * 
+ *
  * This enables the "Process Integrity" layer of the Triple-Verified Stack:
  * - Layer 1: AP2 Intent Verification (Google)
  * - Layer 2: Process Integrity (ChaosChain + TEE attestations) ← THIS MODULE
@@ -112,7 +112,7 @@ export class ProcessIntegrity {
     if (!this.registeredFunctions.has(functionName)) {
       const available = Array.from(this.registeredFunctions.keys());
       throw new IntegrityVerificationError(`Function not registered: ${functionName}`, {
-        available_functions: available
+        available_functions: available,
       });
     }
 
@@ -120,7 +120,9 @@ export class ProcessIntegrity {
     const codeHash = this.functionHashes.get(functionName)!;
 
     const executionMode = useTee && this.computeProvider ? 'local + TEE' : 'local';
-    console.log(`⚡ Executing with ChaosChain Process Integrity: ${functionName} (${executionMode})`);
+    console.log(
+      `⚡ Executing with ChaosChain Process Integrity: ${functionName} (${executionMode})`
+    );
 
     // Execute function
     const startTime = new Date();
@@ -164,7 +166,7 @@ export class ProcessIntegrity {
     } catch (e) {
       throw new IntegrityVerificationError(`Function execution failed: ${e}`, {
         function_name: functionName,
-        inputs
+        inputs,
       });
     }
   }
@@ -206,7 +208,7 @@ export class ProcessIntegrity {
         function: functionName,
         inputs,
         model: 'gpt-oss-120b', // Default model for 0G Compute
-        prompt: `Execute function: ${functionName} with inputs: ${JSON.stringify(inputs)}`
+        prompt: `Execute function: ${functionName} with inputs: ${JSON.stringify(inputs)}`,
       };
 
       const jobId = await this.computeProvider.submit(taskData);
@@ -241,7 +243,7 @@ export class ProcessIntegrity {
               attestation_data: attestationData, // Full attestation proof
               proof: computeResult.proof?.toString('hex'),
               metadata: computeResult.metadata,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             };
           } else {
             console.warn(`⚠️  Compute result failed: ${computeResult.error}`);
@@ -285,12 +287,10 @@ export class ProcessIntegrity {
       result: this.serializeResult(result),
       start_time: startTime.toISOString(),
       execution_time: executionTime.toISOString(),
-      agent_name: this.agentName
+      agent_name: this.agentName,
     };
 
-    const executionHash = createHash('sha256')
-      .update(JSON.stringify(executionData))
-      .digest('hex');
+    const executionHash = createHash('sha256').update(JSON.stringify(executionData)).digest('hex');
 
     // Build proof with optional TEE data
     const proof: IntegrityProof = {
@@ -306,7 +306,7 @@ export class ProcessIntegrity {
       tee_attestation: teeAttestation || undefined,
       tee_provider: teeAttestation?.provider,
       tee_job_id: teeAttestation?.job_id,
-      tee_execution_hash: teeAttestation?.execution_hash
+      tee_execution_hash: teeAttestation?.execution_hash,
     };
 
     const verificationLevel = teeAttestation ? 'local + TEE' : 'local';
@@ -336,14 +336,14 @@ export class ProcessIntegrity {
           tee_attestation: proof.tee_attestation,
           tee_provider: proof.tee_provider,
           tee_job_id: proof.tee_job_id,
-          tee_execution_hash: proof.tee_execution_hash
+          tee_execution_hash: proof.tee_execution_hash,
         },
         verification_layers: {
           local_code_hash: true,
-          tee_attestation: !!proof.tee_attestation
+          tee_attestation: !!proof.tee_attestation,
         },
         timestamp: new Date().toISOString(),
-        agent_name: this.agentName
+        agent_name: this.agentName,
       };
 
       const filename = `process_integrity_proof_${proof.proof_id}.json`;
@@ -389,7 +389,7 @@ export class ProcessIntegrity {
       coverage_amount: coverageAmount,
       conditions,
       created_at: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
     };
 
     console.log(`🛡️  Process insurance policy created: ${policyId}`);
@@ -415,7 +415,7 @@ export class ProcessIntegrity {
       constraints,
       integrity_verification: true,
       registered_functions: Array.from(this.registeredFunctions.keys()),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
 
     console.log(`🤖 Autonomous agent configured: ${configId}`);
@@ -453,4 +453,3 @@ export function integrityCheckedFunction(verifier?: ProcessIntegrityVerifier) {
     return descriptor;
   };
 }
-

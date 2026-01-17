@@ -220,4 +220,3 @@ export class WalletManager {
     return new WalletManager({ privateKey: hdNode.privateKey });
   }
 }
-

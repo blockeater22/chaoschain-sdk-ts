@@ -161,4 +161,3 @@ export function isNetworkSupported(network: string): boolean {
 export function getSupportedNetworks(): string[] {
   return Object.keys(NETWORK_INFO);
 }
-

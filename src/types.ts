@@ -15,6 +15,7 @@ import { ethers } from 'ethers';
 export enum NetworkConfig {
   ETHEREUM_SEPOLIA = 'ethereum-sepolia',
   BASE_SEPOLIA = 'base-sepolia',
+  OPTIMISM_SEPOLIA = 'optimism-sepolia',
   LINEA_SEPOLIA = 'linea-sepolia',
   HEDERA_TESTNET = 'hedera-testnet',
   MODE_TESTNET = 'mode-testnet',
@@ -24,13 +25,29 @@ export enum NetworkConfig {
 }
 
 /**
+ * W3C-compliant payment methods supported by the SDK.
+ */
+export enum PaymentMethod {
+  BASIC_CARD = 'basic-card',
+  GOOGLE_PAY = 'https://google.com/pay',
+  APPLE_PAY = 'https://apple.com/apple-pay',
+  PAYPAL = 'https://paypal.com',
+  A2A_X402 = 'https://a2a.org/x402',
+  DIRECT_TRANSFER = 'direct-transfer',
+}
+
+/**
  * Agent role in the ChaosChain network
  */
 export enum AgentRole {
-  SERVER = 'server',
+  WORKER = 'worker',
+  VERIFIER = 'verifier',
   CLIENT = 'client',
-  VALIDATOR = 'validator',
-  BOTH = 'both',
+  ORCHESTRATOR = 'orchestrator',
+
+  // Legacy alises for backward compatibility
+  SERVER = 'server', // Deprecated: use WORKER
+  VALIDATOR = 'validator', // Deprecated: use VERIFIER
 }
 
 // ============================================================================
@@ -215,6 +232,7 @@ export interface UploadResult {
   cid: string;
   uri: string;
   size?: number;
+  timestamp: number;
 }
 
 /**
@@ -292,10 +310,10 @@ export interface ChaosChainSDKConfig {
   computeProvider?: ComputeProvider;
   walletFile?: string;
   // x402 Facilitator Configuration (EIP-3009)
-  facilitatorUrl?: string;     // e.g., 'https://facilitator.chaoscha.in'
-  facilitatorApiKey?: string;  // Optional API key for managed facilitator
+  facilitatorUrl?: string; // e.g., 'https://facilitator.chaoscha.in'
+  facilitatorApiKey?: string; // Optional API key for managed facilitator
   facilitatorMode?: 'managed' | 'decentralized';
-  agentId?: string;            // ERC-8004 tokenId (e.g., '8004#123')
+  agentId?: string; // ERC-8004 tokenId (e.g., '8004#123')
 }
 
 /**
@@ -382,3 +400,41 @@ export interface ErrorResponse {
   details?: unknown;
 }
 
+/**
+ * Agent identity
+ */
+export interface AgentIdentity {
+  agentId: bigint;
+  agentName: string;
+  agentDomain: string;
+  walletAddress: string;
+  registrationTx: string;
+  network: NetworkConfig;
+}
+
+/**
+ * Proof of Payment Execution
+ */
+export interface PaymentProof {
+  paymentId: string;
+  fromAgent: string;
+  toAgent: string;
+  amount: number;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  transactionHash: string;
+  timestamp: Date;
+  receiptData: Record<string, unknown>;
+  network?: string;
+}
+
+export interface ValidationResult {
+  validationId: string;
+  validatorAgentId: string;
+  score: number;
+  qualityRating: string;
+  validationSummary: string;
+  detailedAssesment: Record<string, unknown>;
+  timestamp: Date;
+  ipfsCid?: string;
+}

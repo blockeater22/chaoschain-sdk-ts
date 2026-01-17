@@ -6,35 +6,40 @@ Thank you for your interest in contributing to the ChaosChain TypeScript SDK! Th
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 - Git
 
 ### Getting Started
 
 1. Fork and clone the repository:
+
 ```bash
 git clone https://github.com/YOUR_USERNAME/chaoschain-sdk-ts.git
 cd chaoschain-sdk-ts
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Create a `.env` file:
+
 ```bash
 cp .env.example .env
 # Add your private key and RPC URLs
 ```
 
 4. Run tests:
+
 ```bash
 npm test
 ```
 
 5. Build the project:
+
 ```bash
 npm run build
 ```
@@ -44,6 +49,7 @@ npm run build
 ### Making Changes
 
 1. Create a new branch:
+
 ```bash
 git checkout -b feature/your-feature-name
 ```
@@ -51,6 +57,7 @@ git checkout -b feature/your-feature-name
 2. Make your changes following our code style
 3. Add tests for new functionality
 4. Ensure all tests pass:
+
 ```bash
 npm run test
 npm run typecheck
@@ -58,6 +65,7 @@ npm run lint
 ```
 
 5. Build to ensure no errors:
+
 ```bash
 npm run build
 ```
@@ -75,6 +83,7 @@ npm run lint
 ```
 
 **Key guidelines:**
+
 - Use TypeScript strict mode
 - Add JSDoc comments for public APIs
 - No `any` types in public interfaces
@@ -128,6 +137,7 @@ npm run test:coverage
 ### Integration Tests
 
 For integration tests against live networks, ensure you have:
+
 - Test wallet with testnet funds
 - Valid RPC endpoints
 - Storage provider credentials (for storage tests)
@@ -173,6 +183,7 @@ Use GitHub Issues with the bug template:
 **Title:** Clear description of the bug
 
 **Description:**
+
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
@@ -186,6 +197,7 @@ Use GitHub Issues with the feature request template:
 **Title:** Feature name
 
 **Description:**
+
 - Use case / problem to solve
 - Proposed solution
 - Alternatives considered
@@ -211,4 +223,3 @@ By contributing, you agree that your contributions will be licensed under the MI
 ---
 
 Thank you for contributing to ChaosChain! 🎉
-

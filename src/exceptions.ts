@@ -94,4 +94,3 @@ export class AuthenticationError extends ChaosChainSDKError {
     Object.setPrototypeOf(this, AuthenticationError.prototype);
   }
 }
-

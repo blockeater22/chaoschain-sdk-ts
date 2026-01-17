@@ -26,12 +26,12 @@ import {
   UploadOptions,
   ComputeProvider,
 } from './types';
-import { PaymentMethod } from './PaymentManager';
+import { PaymentMethod } from './types';
 import { getNetworkInfo, getContractAddresses } from './utils/networks';
 
 /**
  * Main ChaosChain SDK Class - Complete TypeScript implementation
- * 
+ *
  * Features:
  * - ERC-8004 v1.0 on-chain identity, reputation, and validation
  * - x402 crypto payments (USDC/ETH)
@@ -123,7 +123,7 @@ export class ChaosChainSDK {
           facilitatorUrl: config.facilitatorUrl,
           apiKey: config.facilitatorApiKey,
           mode: config.facilitatorMode,
-          agentId: config.agentId
+          agentId: config.agentId,
         }
       );
 
@@ -133,7 +133,7 @@ export class ChaosChainSDK {
         google_pay_merchant_id: process.env.GOOGLE_PAY_MERCHANT_ID,
         apple_pay_merchant_id: process.env.APPLE_PAY_MERCHANT_ID,
         paypal_client_id: process.env.PAYPAL_CLIENT_ID,
-        paypal_client_secret: process.env.PAYPAL_CLIENT_SECRET
+        paypal_client_secret: process.env.PAYPAL_CLIENT_SECRET,
       };
 
       this.paymentManager = new PaymentManager(
@@ -161,10 +161,7 @@ export class ChaosChainSDK {
 
     // Initialize Process Integrity (if enabled)
     if (config.enableProcessIntegrity !== false) {
-      this.processIntegrity = new ProcessIntegrity(
-        this.storageBackend,
-        this.computeProvider
-      );
+      this.processIntegrity = new ProcessIntegrity(this.storageBackend, this.computeProvider);
     }
 
     // Initialize compute provider (if provided)
@@ -237,7 +234,12 @@ export class ChaosChainSDK {
     indexLimit: bigint,
     expiry: bigint
   ): Promise<string> {
-    return this.chaosAgent.generateFeedbackAuthorization(agentId, clientAddress, indexLimit, expiry);
+    return this.chaosAgent.generateFeedbackAuthorization(
+      agentId,
+      clientAddress,
+      indexLimit,
+      expiry
+    );
   }
 
   /**
@@ -261,19 +263,22 @@ export class ChaosChainSDK {
       ...feedbackData,
       score,
       proof_of_payment: paymentProof,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     // Upload to storage
     const feedbackJson = JSON.stringify(fullFeedbackData);
-    const result = await (this.storageBackend as any).put(Buffer.from(feedbackJson), 'application/json');
+    const result = await (this.storageBackend as any).put(
+      Buffer.from(feedbackJson),
+      'application/json'
+    );
     const feedbackUri = `ipfs://${result.cid}`;
 
     // Submit feedback on-chain
     const txHash = await this.chaosAgent.giveFeedback({
       agentId,
       rating: score,
-      feedbackUri
+      feedbackUri,
     });
 
     console.log(`✅ Feedback submitted with payment proof`);
@@ -349,7 +354,13 @@ export class ChaosChainSDK {
     responseHash: string,
     tag?: string
   ): Promise<string> {
-    return this.chaosAgent.respondToValidation(requestHash, response, responseUri, responseHash, tag);
+    return this.chaosAgent.respondToValidation(
+      requestHash,
+      response,
+      responseUri,
+      responseHash,
+      tag
+    );
   }
 
   /**
@@ -394,7 +405,13 @@ export class ChaosChainSDK {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
     }
-    return this.x402PaymentManager.createPaymentRequest(fromAgent, toAgent, amount, currency, serviceDescription);
+    return this.x402PaymentManager.createPaymentRequest(
+      fromAgent,
+      toAgent,
+      amount,
+      currency,
+      serviceDescription
+    );
   }
 
   /**
@@ -422,7 +439,12 @@ export class ChaosChainSDK {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
     }
-    return this.x402PaymentManager.createPaymentRequirements(amount, currency, serviceDescription, expiryMinutes);
+    return this.x402PaymentManager.createPaymentRequirements(
+      amount,
+      currency,
+      serviceDescription,
+      expiryMinutes
+    );
   }
 
   /**
@@ -500,7 +522,12 @@ export class ChaosChainSDK {
     if (!this.paymentManager) {
       throw new Error('Payment manager not enabled');
     }
-    return this.paymentManager.executeTraditionalPayment(paymentMethod, amount, currency, paymentData);
+    return this.paymentManager.executeTraditionalPayment(
+      paymentMethod,
+      amount,
+      currency,
+      paymentData
+    );
   }
 
   /**
@@ -540,7 +567,13 @@ export class ChaosChainSDK {
     if (!this.googleAP2) {
       throw new Error('Google AP2 not enabled');
     }
-    return this.googleAP2.createIntentMandate(userDescription, merchants, skus, requiresRefundability, expiryMinutes);
+    return this.googleAP2.createIntentMandate(
+      userDescription,
+      merchants,
+      skus,
+      requiresRefundability,
+      expiryMinutes
+    );
   }
 
   /**
@@ -557,7 +590,14 @@ export class ChaosChainSDK {
     if (!this.googleAP2) {
       throw new Error('Google AP2 not enabled');
     }
-    return this.googleAP2.createCartMandate(cartId, items, totalAmount, currency, merchantName, expiryMinutes);
+    return this.googleAP2.createCartMandate(
+      cartId,
+      items,
+      totalAmount,
+      currency,
+      merchantName,
+      expiryMinutes
+    );
   }
 
   /**
@@ -624,7 +664,7 @@ export class ChaosChainSDK {
 
     return {
       cid: result.cid,
-      uri: result.url || `ipfs://${result.cid}`
+      uri: result.url || `ipfs://${result.cid}`,
     };
   }
 
@@ -646,7 +686,10 @@ export class ChaosChainSDK {
    * Store evidence (convenience method)
    */
   async storeEvidence(evidenceData: Record<string, any>): Promise<string> {
-    const result = await (this.storageBackend as any).put(Buffer.from(JSON.stringify(evidenceData)), 'application/json');
+    const result = await (this.storageBackend as any).put(
+      Buffer.from(JSON.stringify(evidenceData)),
+      'application/json'
+    );
     console.log(`📦 Stored evidence: ${result.cid}`);
     return result.cid;
   }
@@ -665,7 +708,7 @@ export class ChaosChainSDK {
   /**
    * Get wallet balance
    */
-  async getBalance(): Promise<string> {
+  async getBalance(): Promise<bigint> {
     return this.walletManager.getBalance();
   }
 
@@ -696,12 +739,15 @@ export class ChaosChainSDK {
         google_ap2_intents: !!this.googleAP2,
         process_integrity: !!this.processIntegrity,
         storage: true,
-        compute: !!this.computeProvider
+        compute: !!this.computeProvider,
       },
-      supported_payment_methods: this.paymentManager ? this.paymentManager.getSupportedPaymentMethods() : [],
-      storage_backends: this.storageBackend instanceof AutoStorageManager 
-        ? (this.storageBackend as AutoStorageManager).getAvailableBackends() 
-        : [this.storageBackend.constructor.name]
+      supported_payment_methods: this.paymentManager
+        ? this.paymentManager.getSupportedPaymentMethods()
+        : [],
+      storage_backends:
+        this.storageBackend instanceof AutoStorageManager
+          ? (this.storageBackend as AutoStorageManager).getAvailableBackends()
+          : [this.storageBackend.constructor.name],
     };
   }
 }

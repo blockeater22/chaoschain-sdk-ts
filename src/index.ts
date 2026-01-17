@@ -1,8 +1,8 @@
 /**
  * ChaosChain SDK - TypeScript Entry Point
- * 
+ *
  * Complete TypeScript implementation with feature parity to Python SDK
- * 
+ *
  * @packageDocumentation
  */
 
@@ -29,7 +29,7 @@ export type {
   TransferAuthorizationParams,
   X402FacilitatorConfig,
   SettleRequest,
-  SettleResponse
+  SettleResponse,
 } from './X402PaymentManager';
 export { PaymentManager } from './PaymentManager';
 export { X402Server } from './X402Server';
@@ -51,7 +51,7 @@ export {
   ZeroGStorage,
   AutoStorageManager,
   type StorageBackend,
-  type StorageResult
+  type StorageResult,
 } from './StorageBackends';
 
 // ============================================================================
@@ -85,39 +85,39 @@ export type {
   // Core Config
   ChaosChainSDKConfig,
   WalletConfig,
-  
+
   // Agent Types
   AgentMetadata,
   AgentRegistration,
-  
+
   // Feedback & Reputation
   FeedbackParams,
   FeedbackRecord,
-  
+
   // Validation
   ValidationRequestParams,
   ValidationRequest,
-  
+
   // Payments
   X402PaymentParams,
   X402Payment,
   // X402PaymentReceipt, // Use PaymentReceipt instead
-  
+
   // Storage
   StorageProvider,
   UploadOptions,
   UploadResult,
-  
+
   // Compute
   ComputeProvider,
-  
+
   // Network
   ContractAddresses,
-  
+
   // Process Integrity
   IntegrityProof,
   TEEAttestation,
-  
+
   // Transaction
   TransactionResult,
 } from './types';
@@ -125,35 +125,21 @@ export type {
 // ============================================================================
 // Enums
 // ============================================================================
-export { 
-  NetworkConfig,
-  AgentRole,
-  ValidationStatus
-  // PaymentMethod // Not defined in types.ts yet
-} from './types';
-
-// PaymentMethod enum for traditional + crypto payments
-export enum PaymentMethod {
-  BASIC_CARD = 'basic-card',
-  GOOGLE_PAY = 'https://google.com/pay',
-  APPLE_PAY = 'https://apple.com/apple-pay',
-  PAYPAL = 'https://paypal.com',
-  A2A_X402 = 'https://a2a.org/x402'
-}
+export { NetworkConfig, AgentRole, ValidationStatus, PaymentMethod } from './types';
 
 // ============================================================================
 // Utilities
 // ============================================================================
-export { 
-  getNetworkInfo, 
-  getContractAddresses
+export {
+  getNetworkInfo,
+  getContractAddresses,
   // SUPPORTED_NETWORKS // Not exported from networks.ts
 } from './utils/networks';
 
 export {
   IDENTITY_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
-  VALIDATION_REGISTRY_ABI
+  VALIDATION_REGISTRY_ABI,
   // getIdentityRegistryABI, // Now exported as const
   // getReputationRegistryABI, // Now exported as const
   // getValidationRegistryABI // Now exported as const
@@ -178,11 +164,11 @@ export default SDK;
 
 /**
  * Initialize ChaosChain SDK with minimal configuration
- * 
+ *
  * @example
  * ```typescript
  * import { initChaosChainSDK, ChaosChainSDK } from '@chaoschain/sdk';
- * 
+ *
  * const sdk = initChaosChainSDK({
  *   agentName: 'MyAgent',
  *   agentDomain: 'myagent.example.com',
@@ -190,7 +176,7 @@ export default SDK;
  *   network: 'base-sepolia',
  *   privateKey: process.env.PRIVATE_KEY
  * });
- * 
+ *
  * const { agentId } = await sdk.registerIdentity();
  * console.log(`Agent registered with ID: ${agentId}`);
  * ```

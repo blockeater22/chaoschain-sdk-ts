@@ -214,18 +214,6 @@ describe('ChaosChainSDK', () => {
 
       expect(sdk.agentRole).toBe(AgentRole.VALIDATOR);
     });
-
-    it('should support BOTH role', () => {
-      const sdk = new ChaosChainSDK({
-        agentName: 'HybridAgent',
-        agentDomain: 'hybrid.example.com',
-        agentRole: AgentRole.BOTH,
-        network: NetworkConfig.BASE_SEPOLIA,
-        privateKey: testPrivateKey,
-      });
-
-      expect(sdk.agentRole).toBe(AgentRole.BOTH);
-    });
   });
 
   describe('Storage Integration', () => {
