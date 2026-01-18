@@ -131,7 +131,7 @@ export const NETWORK_INFO: Record<string, NetworkInfo> = {
  * Get network info by name
  */
 export function getNetworkInfo(network: NetworkConfig | string): NetworkInfo {
-  const networkKey = typeof network === 'string' ? network : network.valueOf();
+  const networkKey = network as string;
   const info = NETWORK_INFO[networkKey];
 
   if (!info) {

@@ -6,8 +6,8 @@
  */
 
 import { ethers } from 'ethers';
-import axios from 'axios';
-// import { PaymentError } from './exceptions';
+import axios, { AxiosInstance } from 'axios';
+import { PaymentError } from './exceptions';
 import { NetworkConfig, PaymentMethod } from './types';
 
 export interface TraditionalPaymentRequest {
@@ -52,7 +52,7 @@ export class PaymentManager {
   private network: NetworkConfig;
   private wallet: ethers.Wallet | ethers.HDNodeWallet;
   private credentials: PaymentMethodCredentials;
-  private stripeAxiosInstance?: axios.AxiosInstance;
+  private stripeAxiosInstance?: AxiosInstance;
   private paypalAccessToken?: string;
 
   constructor(
@@ -120,7 +120,7 @@ export class PaymentManager {
     paymentMethod: PaymentMethod,
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log(`💳 Processing ${paymentMethod} payment: $${amount} ${currency}`);
 
@@ -152,7 +152,7 @@ export class PaymentManager {
   private processBasicCard(
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    _paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log('💳 Processing Basic Card via Stripe...');
 
@@ -184,7 +184,7 @@ export class PaymentManager {
   private processGooglePay(
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    _paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log('🅶  Processing Google Pay...');
 
@@ -208,7 +208,7 @@ export class PaymentManager {
   private processApplePay(
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    _paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log('🍎 Processing Apple Pay...');
 
@@ -232,7 +232,7 @@ export class PaymentManager {
   private processPayPal(
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    _paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log('💙 Processing PayPal...');
 
@@ -273,7 +273,7 @@ export class PaymentManager {
   private processA2AX402(
     amount: number,
     currency: string,
-    paymentData_unused: Record<string, any>
+    paymentData: Record<string, any>
   ): TraditionalPaymentResult {
     console.log('🔗 Processing A2A-x402 crypto payment...');
 

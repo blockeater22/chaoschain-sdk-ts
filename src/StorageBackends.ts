@@ -6,8 +6,7 @@
  */
 
 import axios from 'axios';
-import * as fs from 'fs';
-import * as path from 'path';
+import FormData from 'form-data';
 import { StorageError } from './exceptions';
 
 export interface StorageResult {
@@ -44,7 +43,6 @@ export class LocalIPFSStorage implements StorageBackend {
       const buffer = typeof data === 'string' ? Buffer.from(data) : data;
 
       // Use multipart/form-data to upload
-      const FormData = require('form-data');
       const form = new FormData();
       form.append('file', buffer, { contentType: mime });
 
@@ -129,7 +127,6 @@ export class PinataStorage implements StorageBackend {
     try {
       const buffer = typeof data === 'string' ? Buffer.from(data) : data;
 
-      const FormData = require('form-data');
       const form = new FormData();
       form.append('file', buffer, {
         contentType: mime,
@@ -217,7 +214,12 @@ export class IrysStorage implements StorageBackend {
     console.log(`💎 Irys (Arweave) Storage initialized`);
   }
 
-  async put(data: Buffer | string, mime: string = 'application/json'): Promise<StorageResult> {
+  /** Get wallet key (for future SDK integration) */
+  getWalletKey(): string {
+    return this.walletKey;
+  }
+
+  async put(_data: Buffer | string, _mime: string = 'application/json'): Promise<StorageResult> {
     try {
       // In production, use @irys/sdk
       // const Irys = require('@irys/sdk').default;
@@ -269,7 +271,17 @@ export class ZeroGStorage implements StorageBackend {
     console.log(`⚡ 0G Storage initialized: ${grpcUrl}`);
   }
 
-  async put(data: Buffer | string, mime: string = 'application/json'): Promise<StorageResult> {
+  /** Get gRPC URL (for connection management) */
+  getGrpcUrl(): string {
+    return this.grpcUrl;
+  }
+
+  /** Get private key (for signing) */
+  getPrivateKey(): string {
+    return this.privateKey;
+  }
+
+  async put(_data: Buffer | string, _mime: string = 'application/json'): Promise<StorageResult> {
     try {
       // In production, call 0G Storage CLI via gRPC
       // For now, simulate
@@ -287,7 +299,7 @@ export class ZeroGStorage implements StorageBackend {
     }
   }
 
-  async get(cid: string): Promise<Buffer> {
+  async get(_cid: string): Promise<Buffer> {
     try {
       // In production, retrieve from 0G Storage via CLI
       // For now, throw error

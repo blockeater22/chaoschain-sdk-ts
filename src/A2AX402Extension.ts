@@ -7,8 +7,8 @@
  * Based on: https://github.com/google-agentic-commerce/a2a-x402/blob/main/v0.1/spec.md
  */
 
+import * as crypto from 'crypto';
 import { NetworkConfig, PaymentMethod } from './types';
-import { PaymentError } from './exceptions';
 
 export interface X402PaymentMethod {
   supported_methods: string[];
@@ -343,7 +343,6 @@ export class A2AX402Extension {
 
     // Create proof hash
     const proofJson = JSON.stringify(proofData);
-    const crypto = require('crypto');
     const proofHash = crypto.createHash('sha256').update(proofJson).digest('hex');
 
     return {

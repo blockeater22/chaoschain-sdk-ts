@@ -7,6 +7,7 @@
  * Based on: https://www.x402.org/ and https://github.com/coinbase/x402
  */
 
+import * as crypto from 'crypto';
 import { ethers } from 'ethers';
 import { PaymentError } from './exceptions';
 import { NetworkConfig } from './types';
@@ -576,7 +577,8 @@ export class X402PaymentManager {
     // USDC has 6 decimals
     const totalAmountWei = ethers.parseUnits(amount.toString(), 6);
     const feeWei = ethers.parseUnits(protocolFee.toString(), 6);
-    const netAmountWei = totalAmountWei - feeWei;
+    // Net amount: totalAmountWei - feeWei (used for recipient calculation)
+    void feeWei; // Fee is logged separately
 
     console.log(`💳 Preparing EIP-3009 payment authorization...`);
     console.log(`   Total: ${amount} USDC`);
@@ -766,7 +768,6 @@ export class X402PaymentManager {
     };
 
     // Create receipt hash
-    const crypto = require('crypto');
     const receiptJson = JSON.stringify(receiptData);
     const receiptHash = crypto.createHash('sha256').update(receiptJson).digest('hex');
 

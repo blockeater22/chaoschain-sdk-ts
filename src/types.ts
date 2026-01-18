@@ -44,11 +44,13 @@ export enum AgentRole {
   VERIFIER = 'verifier',
   CLIENT = 'client',
   ORCHESTRATOR = 'orchestrator',
-
-  // Legacy aliases for backward compatibility
-  SERVER = 'worker', // Deprecated: use WORKER
-  VALIDATOR = 'verifier', // Deprecated: use VERIFIER
 }
+
+// Legacy aliases for backward compatibility (deprecated)
+/** @deprecated Use AgentRole.WORKER instead */
+export const AgentRoleSERVER = AgentRole.WORKER;
+/** @deprecated Use AgentRole.VERIFIER instead */
+export const AgentRoleVALIDATOR = AgentRole.VERIFIER;
 
 // ============================================================================
 // Contract Types

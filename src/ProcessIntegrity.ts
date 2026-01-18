@@ -51,6 +51,7 @@ export class ProcessIntegrity {
   private agentName: string;
   private storageManager: StorageProvider | null;
   private computeProvider: ComputeProvider | null;
+  // eslint-disable-next-line @typescript-eslint/ban-types
   private registeredFunctions: Map<string, Function>;
   private functionHashes: Map<string, string>;
 
@@ -74,6 +75,7 @@ export class ProcessIntegrity {
   /**
    * Register a function for integrity checking.
    */
+  // eslint-disable-next-line @typescript-eslint/ban-types
   registerFunction(func: Function, functionName?: string): string {
     const name = functionName || func.name;
 
@@ -164,6 +166,7 @@ export class ProcessIntegrity {
   /**
    * Generate a hash of the function's code.
    */
+  // eslint-disable-next-line @typescript-eslint/ban-types
   private generateCodeHash(func: Function): string {
     try {
       // Get function source code

@@ -9,7 +9,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as jose from 'jose';
-import { ConfigurationError, PaymentError } from './exceptions';
+// Exceptions available if needed: ConfigurationError, PaymentError
 
 export interface IntentMandate {
   user_cart_confirmation_required: boolean;
@@ -78,11 +78,11 @@ export class GoogleAP2Integration {
   private agentName: string;
   private privateKey: crypto.KeyObject;
   private publicKey: string;
-  private merchantPrivateKey: string;
+  private merchantPrivateKeyValue: string;
 
   constructor(agentName: string, merchantPrivateKey?: string) {
     this.agentName = agentName;
-    this.merchantPrivateKey = merchantPrivateKey || 'demo_private_key_123';
+    this.merchantPrivateKeyValue = merchantPrivateKey || 'demo_private_key_123';
 
     // Generate or load RSA keypair for production JWT signing
     const keypair = this.getOrGenerateRsaKeypair();
@@ -90,6 +90,13 @@ export class GoogleAP2Integration {
     this.publicKey = keypair.publicKey;
 
     console.log(`✅ Google AP2 Integration initialized for ${agentName}`);
+  }
+
+  /**
+   * Get merchant private key (for future use in payment verification)
+   */
+  getMerchantPrivateKey(): string {
+    return this.merchantPrivateKeyValue;
   }
 
   /**

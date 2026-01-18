@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   NetworkConfig,
   AgentRole,
+  AgentRoleSERVER,
+  AgentRoleVALIDATOR,
   AgentMetadata,
   StorageProvider,
   ComputeProvider,
@@ -52,18 +54,18 @@ describe('Type Exports', () => {
       expect(AgentRole).toBeDefined();
     });
 
-    // DEPRECATED
-    it('should have SERVER role', () => {
-      expect(AgentRole.SERVER).toBe('worker');
+    // DEPRECATED - now exported as separate const
+    it('should have SERVER role (deprecated)', () => {
+      expect(AgentRoleSERVER).toBe('worker');
     });
 
     it('should have CLIENT role', () => {
       expect(AgentRole.CLIENT).toBe('client');
     });
 
-    // DEPRECATED
-    it('should have VALIDATOR role', () => {
-      expect(AgentRole.VALIDATOR).toBe('verifier');
+    // DEPRECATED - now exported as separate const
+    it('should have VALIDATOR role (deprecated)', () => {
+      expect(AgentRoleVALIDATOR).toBe('verifier');
     });
   });
 
@@ -72,14 +74,14 @@ describe('Type Exports', () => {
       const metadata: AgentMetadata = {
         name: 'TestAgent',
         domain: 'test.example.com',
-        role: AgentRole.SERVER,
+        role: AgentRole.WORKER,
         capabilities: ['analysis', 'verification'],
         version: '1.0.0',
       };
 
       expect(metadata.name).toBe('TestAgent');
       expect(metadata.domain).toBe('test.example.com');
-      expect(metadata.role).toBe(AgentRole.SERVER);
+      expect(metadata.role).toBe(AgentRole.WORKER);
       expect(metadata.capabilities).toEqual(['analysis', 'verification']);
       expect(metadata.version).toBe('1.0.0');
     });
@@ -100,7 +102,7 @@ describe('Type Exports', () => {
       const metadata: AgentMetadata = {
         name: 'TestAgent',
         domain: 'test.example.com',
-        role: AgentRole.SERVER,
+        role: AgentRole.WORKER,
       };
 
       // These should be optional
@@ -368,9 +370,8 @@ describe('Type Exports', () => {
       expect(network).toBe('base-sepolia');
     });
 
-    // DEPRECATED
     it('should enforce AgentRole type', () => {
-      const role: AgentRole = AgentRole.VALIDATOR;
+      const role: AgentRole = AgentRole.VERIFIER;
       expect(role).toBe('verifier');
     });
 
