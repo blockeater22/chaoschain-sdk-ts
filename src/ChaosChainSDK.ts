@@ -724,6 +724,13 @@ export class ChaosChainSDK {
   }
 
   /**
+   * Get SDK version
+   */
+  getVersion(): string {
+    return '0.1.3';
+  }
+
+  /**
    * Get SDK capabilities summary
    */
   getCapabilities(): Record<string, any> {

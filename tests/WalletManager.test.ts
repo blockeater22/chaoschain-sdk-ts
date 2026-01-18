@@ -164,10 +164,9 @@ describe('WalletManager', () => {
     });
 
     it('should load wallet from file', async () => {
-      // First save a wallet
+      // First save a wallet WITHOUT password (unencrypted JSON)
       const walletManager = new WalletManager({ privateKey: testPrivateKey });
-      const password = 'test-password-123';
-      await walletManager.saveToFile(testWalletPath, password);
+      await walletManager.saveToFile(testWalletPath); // No password = unencrypted
 
       // Then load it
       const loadedWalletManager = new WalletManager({ walletFile: testWalletPath });
@@ -184,8 +183,8 @@ describe('WalletManager', () => {
       const fileContent = fs.readFileSync(testWalletPath, 'utf-8');
       const jsonContent = JSON.parse(fileContent);
 
-      // Check that it's encrypted (has crypto field)
-      expect(jsonContent).toHaveProperty('crypto');
+      // Check that it's encrypted (ethers v6 uses 'Crypto' uppercase)
+      expect(jsonContent).toHaveProperty('Crypto');
       expect(jsonContent).toHaveProperty('address');
     });
   });
