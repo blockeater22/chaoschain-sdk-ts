@@ -21,7 +21,6 @@ import {
   AgentMetadata,
   AgentRegistration,
   FeedbackParams,
-  ValidationRequestParams,
   UploadResult,
   UploadOptions,
   ComputeProvider,
@@ -669,6 +668,7 @@ export class ChaosChainSDK {
     return {
       cid: result.cid,
       uri: result.url || `ipfs://${result.cid}`,
+      timestamp: Date.now(),
     };
   }
 

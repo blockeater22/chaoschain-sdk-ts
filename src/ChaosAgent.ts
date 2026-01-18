@@ -8,10 +8,6 @@ import {
   AgentMetadata,
   AgentRegistration,
   FeedbackParams,
-  FeedbackRecord,
-  ValidationRequestParams,
-  ValidationRequest,
-  ValidationStatus,
   ContractAddresses,
 } from './types';
 import {
@@ -354,7 +350,9 @@ export class ChaosAgent {
     const tag2 = feedbackData?.tag2 || ethers.ZeroHash; // bytes32
 
     // Calculate feedback hash
-    const feedbackContent = feedbackData?.content || feedbackUri;
+    const feedbackContent = typeof feedbackData?.content === 'string'
+      ? feedbackData.content
+      : feedbackUri;
     const feedbackHash = ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
 
     // Feedback auth (289 bytes: struct + signature)
