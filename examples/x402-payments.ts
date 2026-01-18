@@ -38,9 +38,10 @@ async function main() {
   // Create payment requirements (HTTP 402 response)
   console.log('\n📋 Creating payment requirements...');
   const requirements = sdk.createX402PaymentRequirements(
-    '5.0',
+    5.0,
     'USDC',
-    'Premium AI Analysis Service'
+    'Premium AI Analysis Service',
+    'ipfs://QmExample'
   );
   console.log('Status:', requirements.statusCode);
   console.log('Headers:', requirements.headers);

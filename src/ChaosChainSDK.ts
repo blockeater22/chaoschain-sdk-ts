@@ -159,13 +159,17 @@ export class ChaosChainSDK {
       );
     }
 
-    // Initialize Process Integrity (if enabled)
-    if (config.enableProcessIntegrity !== false) {
-      this.processIntegrity = new ProcessIntegrity(this.storageBackend, this.computeProvider);
-    }
-
     // Initialize compute provider (if provided)
     this.computeProvider = config.computeProvider;
+
+    // Initialize Process Integrity (if enabled)
+    if (config.enableProcessIntegrity !== false) {
+      this.processIntegrity = new ProcessIntegrity(
+        this.agentName,
+        this.storageBackend as any,
+        this.computeProvider as any
+      );
+    }
 
     console.log(`🚀 ChaosChain SDK initialized for ${this.agentName}`);
     console.log(`   Network: ${this.network}`);
@@ -434,7 +438,7 @@ export class ChaosChainSDK {
     amount: number,
     currency: string = 'USDC',
     serviceDescription: string = 'AI Agent Service',
-    expiryMinutes: number = 30
+    evidenceCid?: string
   ): Record<string, any> {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
@@ -443,7 +447,7 @@ export class ChaosChainSDK {
       amount,
       currency,
       serviceDescription,
-      expiryMinutes
+      evidenceCid
     );
   }
 

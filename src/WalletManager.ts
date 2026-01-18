@@ -25,7 +25,7 @@ export class WalletManager {
   /**
    * Initialize wallet from various sources
    */
-  private initializeWallet(config: WalletConfig): ethers.Wallet {
+  private initializeWallet(config: WalletConfig): ethers.Wallet | ethers.HDNodeWallet {
     if (config.privateKey) {
       return new ethers.Wallet(config.privateKey);
     }
@@ -78,7 +78,7 @@ export class WalletManager {
       const data = {
         address: this.wallet.address,
         privateKey: this.wallet.privateKey,
-        mnemonic: this.wallet.mnemonic?.phrase,
+        mnemonic: 'mnemonic' in this.wallet ? this.wallet.mnemonic?.phrase : undefined,
         encrypted: false,
       };
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
@@ -88,7 +88,7 @@ export class WalletManager {
   /**
    * Get wallet instance
    */
-  getWallet(): ethers.Wallet {
+  getWallet(): ethers.Wallet | ethers.HDNodeWallet {
     return this.wallet;
   }
 
@@ -110,7 +110,7 @@ export class WalletManager {
    * Get mnemonic phrase (if available)
    */
   getMnemonic(): string | undefined {
-    return this.wallet.mnemonic?.phrase;
+    return 'mnemonic' in this.wallet ? this.wallet.mnemonic?.phrase : undefined;
   }
 
   /**

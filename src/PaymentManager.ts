@@ -50,7 +50,7 @@ export interface PaymentMethodCredentials {
 export class PaymentManager {
   private agentName: string;
   private network: NetworkConfig;
-  private wallet: ethers.Wallet;
+  private wallet: ethers.Wallet | ethers.HDNodeWallet;
   private credentials: PaymentMethodCredentials;
   private stripeAxiosInstance?: axios.AxiosInstance;
   private paypalAccessToken?: string;
@@ -58,7 +58,7 @@ export class PaymentManager {
   constructor(
     agentName: string,
     network: NetworkConfig,
-    wallet: ethers.Wallet,
+    wallet: ethers.Wallet | ethers.HDNodeWallet,
     credentials: PaymentMethodCredentials = {}
   ) {
     this.agentName = agentName;

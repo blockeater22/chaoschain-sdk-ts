@@ -184,7 +184,7 @@ export class ProcessIntegrity {
   private async getTeeAttestation(
     functionName: string,
     inputs: Record<string, any>,
-    result: any
+    _result: any
   ): Promise<TEEAttestation | null> {
     if (!this.computeProvider) {
       return null;
@@ -419,8 +419,8 @@ export class ProcessIntegrity {
 /**
  * Decorator for automatically registering functions with integrity checking.
  */
-export function integrityCheckedFunction(verifier?: ProcessIntegrityVerifier) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+export function integrityCheckedFunction(verifier?: ProcessIntegrity) {
+  return function (_target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
