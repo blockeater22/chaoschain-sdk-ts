@@ -149,9 +149,7 @@ export class WorkflowFailedError extends GatewayError {
   public readonly workflowError: WorkflowErrorType;
 
   constructor(workflowId: string, error: WorkflowErrorType) {
-    super(
-      `Workflow ${workflowId} failed at step ${error.step}: ${error.message}`
-    );
+    super(`Workflow ${workflowId} failed at step ${error.step}: ${error.message}`);
     this.name = 'WorkflowFailedError';
     this.workflowId = workflowId;
     this.workflowError = error;
