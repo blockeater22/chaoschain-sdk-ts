@@ -1,9 +1,14 @@
+import { error } from 'console';
+import { WorkflowError as WorkflowErrorType } from './types';
+
 /**
  * Exception classes for the ChaosChain SDK.
  *
  * This module defines all custom exceptions used throughout the SDK
  * to provide clear error handling and debugging information.
  */
+
+import { WorkflowStatus } from './types';
 
 export class ChaosChainSDKError extends Error {
   public details: Record<string, any>;
@@ -92,5 +97,63 @@ export class AuthenticationError extends ChaosChainSDKError {
     super(message, details);
     this.name = 'AuthenticationError';
     Object.setPrototypeOf(this, AuthenticationError.prototype);
+  }
+}
+
+/**
+ * Base error from Gateway API.
+ */
+export class GatewayError extends ChaosChainSDKError {
+  public readonly statusCode?: number;
+  public readonly response?: Record<string, any>;
+
+  constructor(message: string, details?: { statusCode?: number; response?: Record<string, any> }) {
+    super(message, details || {});
+    this.name = 'GatewayError';
+    this.statusCode = details?.statusCode;
+    this.response = details?.response;
+    //Object.setPrototypeOf(this, GatewayError.prototype);
+  }
+}
+
+/**
+ * Failed to connect to Gateway.
+ */
+export class GatewayConnectionError extends GatewayError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GatewayConnectionError';
+  }
+}
+
+/**
+ * Gateway request or polling timed out.
+ */
+export class GatewayTimeoutError extends GatewayError {
+  public readonly workflowId: string;
+  public readonly lastStatus?: WorkflowStatus;
+
+  constructor(workflowId: string, message: string, lastStatus?: WorkflowStatus) {
+    super(message);
+    this.name = 'GatewayTimeoutError';
+    this.workflowId = workflowId;
+    this.lastStatus = lastStatus;
+  }
+}
+
+/**
+ * Workflow reached FAILED state.
+ */
+export class WorkflowFailedError extends GatewayError {
+  public readonly workflowId: string;
+  public readonly workflowError: WorkflowErrorType;
+
+  constructor(workflowId: string, error: WorkflowErrorType) {
+    super(
+      `Workflow ${workflowId} failed at step ${error.step}: ${error.message}`
+    );
+    this.name = 'WorkflowFailedError';
+    this.workflowId = workflowId;
+    this.workflowError = error;
   }
 }

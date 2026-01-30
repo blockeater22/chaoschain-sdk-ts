@@ -23,7 +23,7 @@ export interface StorageProvider {
 
 export interface ComputeProvider {
   submit(task: any): Promise<string>;
-  status(jobId: string): Promise<{ state: string;[key: string]: any }>;
+  status(jobId: string): Promise<{ state: string; [key: string]: any }>;
   result(jobId: string): Promise<{
     success: boolean;
     execution_hash: string;

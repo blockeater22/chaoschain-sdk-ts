@@ -116,8 +116,8 @@ describe('Type Exports', () => {
       const mockStorage: StorageProvider = {
         upload: async () => ({ cid: 'QmTest', size: 100, uri: 'ipfs://QmTest' }),
         download: async () => Buffer.from('test'),
-        pin: async () => { },
-        unpin: async () => { },
+        pin: async () => {},
+        unpin: async () => {},
       };
 
       expect(mockStorage.upload).toBeDefined();
@@ -130,8 +130,8 @@ describe('Type Exports', () => {
       const mockStorage: StorageProvider = {
         upload: async () => ({ cid: 'QmTest123', size: 256, uri: 'ipfs://QmTest123' }),
         download: async () => Buffer.from('test'),
-        pin: async () => { },
-        unpin: async () => { },
+        pin: async () => {},
+        unpin: async () => {},
       };
 
       const result: UploadResult = await mockStorage.upload(Buffer.from('test'));

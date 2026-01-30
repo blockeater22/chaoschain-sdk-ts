@@ -4,12 +4,7 @@
  */
 
 import { ethers } from 'ethers';
-import {
-  AgentMetadata,
-  AgentRegistration,
-  FeedbackParams,
-  ContractAddresses,
-} from './types';
+import { AgentMetadata, AgentRegistration, FeedbackParams, ContractAddresses } from './types';
 import {
   IDENTITY_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
@@ -350,9 +345,10 @@ export class ChaosAgent {
     const tag2 = feedbackData?.tag2 || ethers.ZeroHash; // bytes32
 
     // Calculate feedback hash
-    const feedbackContent = typeof feedbackData?.content === 'string' // we could add a type guard here instead of using typeof
-      ? feedbackData.content
-      : feedbackUri;
+    const feedbackContent =
+      typeof feedbackData?.content === 'string' // we could add a type guard here instead of using typeof
+        ? feedbackData.content
+        : feedbackUri;
     const feedbackHash = ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
 
     // Feedback auth (289 bytes: struct + signature)

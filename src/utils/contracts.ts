@@ -399,106 +399,106 @@ export const REPUTATION_REGISTRY_ABI = [
 export const VALIDATION_REGISTRY_ABI = [
   // Core Functions
   {
-    "inputs": [
-      { "name": "validatorAddress", "type": "address" },
-      { "name": "agentId", "type": "uint256" },
-      { "name": "requestUri", "type": "string" },
-      { "name": "requestHash", "type": "bytes32" }
+    inputs: [
+      { name: 'validatorAddress', type: 'address' },
+      { name: 'agentId', type: 'uint256' },
+      { name: 'requestUri', type: 'string' },
+      { name: 'requestHash', type: 'bytes32' },
     ],
-    "name": "validationRequest",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: 'validationRequest',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
   },
   {
-    "inputs": [
-      { "name": "requestHash", "type": "bytes32" },
-      { "name": "response", "type": "uint8" },
-      { "name": "responseUri", "type": "string" },
-      { "name": "responseHash", "type": "bytes32" },
-      { "name": "tag", "type": "bytes32" }
+    inputs: [
+      { name: 'requestHash', type: 'bytes32' },
+      { name: 'response', type: 'uint8' },
+      { name: 'responseUri', type: 'string' },
+      { name: 'responseHash', type: 'bytes32' },
+      { name: 'tag', type: 'bytes32' },
     ],
-    "name": "validationResponse",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: 'validationResponse',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
   },
   // Read Functions
   {
-    "inputs": [{ "name": "requestHash", "type": "bytes32" }],
-    "name": "getValidationStatus",
-    "outputs": [
-      { "name": "validatorAddress", "type": "address" },
-      { "name": "agentId", "type": "uint256" },
-      { "name": "response", "type": "uint8" },
-      { "name": "responseHash", "type": "bytes32" },
-      { "name": "tag", "type": "bytes32" },
-      { "name": "lastUpdate", "type": "uint256" }
+    inputs: [{ name: 'requestHash', type: 'bytes32' }],
+    name: 'getValidationStatus',
+    outputs: [
+      { name: 'validatorAddress', type: 'address' },
+      { name: 'agentId', type: 'uint256' },
+      { name: 'response', type: 'uint8' },
+      { name: 'responseHash', type: 'bytes32' },
+      { name: 'tag', type: 'bytes32' },
+      { name: 'lastUpdate', type: 'uint256' },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: 'view',
+    type: 'function',
   },
   {
-    "inputs": [
-      { "name": "agentId", "type": "uint256" },
-      { "name": "validatorAddresses", "type": "address[]" },
-      { "name": "tag", "type": "bytes32" }
+    inputs: [
+      { name: 'agentId', type: 'uint256' },
+      { name: 'validatorAddresses', type: 'address[]' },
+      { name: 'tag', type: 'bytes32' },
     ],
-    "name": "getSummary",
-    "outputs": [
-      { "name": "count", "type": "uint64" },
-      { "name": "avgResponse", "type": "uint8" }
+    name: 'getSummary',
+    outputs: [
+      { name: 'count', type: 'uint64' },
+      { name: 'avgResponse', type: 'uint8' },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: 'view',
+    type: 'function',
   },
   {
-    "inputs": [{ "name": "agentId", "type": "uint256" }],
-    "name": "getAgentValidations",
-    "outputs": [{ "name": "requestHashes", "type": "bytes32[]" }],
-    "stateMutability": "view",
-    "type": "function"
+    inputs: [{ name: 'agentId', type: 'uint256' }],
+    name: 'getAgentValidations',
+    outputs: [{ name: 'requestHashes', type: 'bytes32[]' }],
+    stateMutability: 'view',
+    type: 'function',
   },
   {
-    "inputs": [{ "name": "validatorAddress", "type": "address" }],
-    "name": "getValidatorRequests",
-    "outputs": [{ "name": "requestHashes", "type": "bytes32[]" }],
-    "stateMutability": "view",
-    "type": "function"
+    inputs: [{ name: 'validatorAddress', type: 'address' }],
+    name: 'getValidatorRequests',
+    outputs: [{ name: 'requestHashes', type: 'bytes32[]' }],
+    stateMutability: 'view',
+    type: 'function',
   },
   {
-    "inputs": [],
-    "name": "getIdentityRegistry",
-    "outputs": [{ "name": "registry", "type": "address" }],
-    "stateMutability": "view",
-    "type": "function"
+    inputs: [],
+    name: 'getIdentityRegistry',
+    outputs: [{ name: 'registry', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
   },
   // Events
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "name": "validatorAddress", "type": "address" },
-      { "indexed": true, "name": "agentId", "type": "uint256" },
-      { "indexed": false, "name": "requestUri", "type": "string" },
-      { "indexed": true, "name": "requestHash", "type": "bytes32" }
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'validatorAddress', type: 'address' },
+      { indexed: true, name: 'agentId', type: 'uint256' },
+      { indexed: false, name: 'requestUri', type: 'string' },
+      { indexed: true, name: 'requestHash', type: 'bytes32' },
     ],
-    "name": "ValidationRequest",
-    "type": "event"
+    name: 'ValidationRequest',
+    type: 'event',
   },
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "name": "validatorAddress", "type": "address" },
-      { "indexed": true, "name": "agentId", "type": "uint256" },
-      { "indexed": true, "name": "requestHash", "type": "bytes32" },
-      { "indexed": false, "name": "response", "type": "uint8" },
-      { "indexed": false, "name": "responseUri", "type": "string" },
-      { "indexed": false, "name": "responseHash", "type": "bytes32" },
-      { "indexed": false, "name": "tag", "type": "bytes32" }
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'validatorAddress', type: 'address' },
+      { indexed: true, name: 'agentId', type: 'uint256' },
+      { indexed: true, name: 'requestHash', type: 'bytes32' },
+      { indexed: false, name: 'response', type: 'uint8' },
+      { indexed: false, name: 'responseUri', type: 'string' },
+      { indexed: false, name: 'responseHash', type: 'bytes32' },
+      { indexed: false, name: 'tag', type: 'bytes32' },
     ],
-    "name": "ValidationResponse",
-    "type": "event"
-  }
+    name: 'ValidationResponse',
+    type: 'event',
+  },
 ] as const;
 
 /**

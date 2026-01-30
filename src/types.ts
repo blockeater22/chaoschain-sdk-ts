@@ -264,10 +264,10 @@ export interface ComputeProvider {
  * Verification method
  */
 export enum VerificationMethod {
-  TEE_ML = "tee-ml",  // Trusted Execution Environment
-  ZK_ML = "zk-ml",    // Zero-Knowledge Machine Learning
-  OP_ML = "op-ml",    // Optimistic Machine Learning
-  NONE = "none"       // No verification
+  TEE_ML = 'tee-ml', // Trusted Execution Environment
+  ZK_ML = 'zk-ml', // Zero-Knowledge Machine Learning
+  OP_ML = 'op-ml', // Optimistic Machine Learning
+  NONE = 'none', // No verification
 }
 
 /**
@@ -457,4 +457,151 @@ export interface ValidationResult {
   detailedAssessment: Record<string, unknown>;
   timestamp: Date;
   ipfsCid?: string;
+}
+
+// ============================================================================
+// Gateway & Workflow Types
+// Ref: /chaoschain/packages/sdk/chaoschain_sdk/gateway_client.py
+// ============================================================================
+
+/**
+ * Workflow types supported by Gateway.
+ */
+export enum WorkflowType {
+  WORK_SUBMISSION = 'WorkSubmission',
+  SCORE_SUBMISSION = 'ScoreSubmission',
+  CLOSE_EPOCH = 'CloseEpoch',
+}
+
+/**
+ * Workflow states.
+ */
+export enum WorkflowState {
+  CREATED = 'CREATED',
+  RUNNING = 'RUNNING',
+  STALLED = 'STALLED',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+/**
+ * Score submission modes supported by Gateway.
+ * - DIRECT: Simple direct scoring via submitScoreVectorForWorker (default, MVP)
+ * - COMMIT_REVEAL: Commit-reveal pattern (prevents last-mover bias)
+ */
+export enum ScoreSubmissionMode {
+  DIRECT = 'direct',
+  COMMIT_REVEAL = 'commit_reveal',
+}
+
+/**
+ * Progress data for a workflow.
+ * Populated as the workflow progresses through steps.
+ */
+export interface WorkflowProgress {
+  /** Arweave transaction ID for evidence archival */
+  arweaveTxId?: string;
+  /** Whether Arweave transaction is confirmed */
+  arweaveConfirmed?: boolean;
+  /** On-chain transaction hash */
+  onchainTxHash?: string;
+  /** Whether on-chain transaction is confirmed */
+  onchainConfirmed?: boolean;
+  /** Block number of on-chain confirmation */
+  onchainBlock?: number;
+  /** Score submission transaction hash (direct mode) */
+  scoreTxHash?: string;
+  /** Commit transaction hash (commit-reveal mode) */
+  commitTxHash?: string;
+  /** Reveal transaction hash (commit-reveal mode) */
+  revealTxHash?: string;
+}
+
+/**
+ * Error information for a failed workflow.
+ */
+export interface WorkflowError {
+  /** Step where the error occurred */
+  step: string;
+  /** Human-readable error message */
+  message: string;
+  /** Optional error code */
+  code?: string;
+}
+
+/**
+ * Status of a workflow.
+ */
+export interface WorkflowStatus {
+  /** Unique workflow identifier (UUID) */
+  workflowId: string;
+  /** Type of workflow */
+  workflowType: WorkflowType;
+  /** Current state */
+  state: WorkflowState;
+  /** Current step name */
+  step: string;
+  /** Unix timestamp of creation */
+  createdAt: number;
+  /** Unix timestamp of last update */
+  updatedAt: number;
+  /** Progress information */
+  progress: WorkflowProgress;
+  /** Error information (if state is FAILED) */
+  error?: WorkflowError;
+}
+
+/**
+ * Gateway client configuration.
+ */
+export interface GatewayClientConfig {
+  /** Gateway API URL (e.g., "http://localhost:3000") */
+  gatewayUrl: string;
+  /** Request timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Maximum time to wait for workflow completion in milliseconds (default: 300000) */
+  maxPollTime?: number;
+  /** Interval between status polls in milliseconds (default: 2000) */
+  pollInterval?: number;
+}
+
+// ============================================================================
+// Deprecated Types (backward compatibility only)
+// These types existed in early designs but functionality moved to Gateway
+// ============================================================================
+
+/**
+ * @deprecated XMTP functionality has moved to the Gateway service.
+ * This type is kept for backward compatibility only.
+ * Do NOT implement XMTP client in SDK - use Gateway instead.
+ */
+export interface XMTPMessageData {
+  messageId: string;
+  fromAgent: string;
+  toAgent: string;
+  content: any;
+  timestamp: number;
+  parentIds: string[];
+  artifactIds: string[];
+  signature: string;
+}
+
+/**
+ * @deprecated DKG functionality has moved to the Gateway service.
+ * This type is kept for backward compatibility only.
+ * Do NOT implement DKG in SDK - Gateway constructs the graph.
+ */
+export interface DKGNodeData {
+  author: string;
+  sig: string;
+  ts: number;
+  xmtpMsgId: string;
+  artifactIds: string[];
+  payloadHash: string;
+  parents: string[];
+  content?: string;
+  nodeType?: string;
+  metadata?: Record<string, any>;
+  vlc?: string;
+  canonicalHash?: string;
 }
