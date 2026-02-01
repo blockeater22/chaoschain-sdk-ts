@@ -120,4 +120,157 @@ export class GatewayClient {
   // ===========================================================================
   // Health Check
   // ===========================================================================
+
+  async healthCheck(): Promise<{ status: string; timestamp?: number }> {
+    return this._request('GET', '/health');
+  }
+
+  async isHealthy(): Promise<boolean> {
+    try {
+      const result = await this.healthCheck();
+      return result.status === 'ok';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // Workflow Submission
+  // ===========================================================================
+
+  /**
+   * Create a work submission workflow.
+   * POST /workflows/work-submission
+   *
+   * SDK prepares inputs; Gateway handles:
+   * - Evidence upload to Arweave
+   * - Transaction submission
+   * - Confirmation waiting
+   *
+   * @param studioAddress - Ethereum address of the studio
+   * @param epoch - Epoch number
+   * @param agentAddress - Ethereum address of the submitting agent
+   * @param dataHash - Bytes32 hash of the work (as hex string)
+   * @param threadRoot - Bytes32 DKG thread root (as hex string)
+   * @param evidenceRoot - Bytes32 evidence Merkle root (as hex string)
+   * @param evidenceContent - Raw evidence bytes (will be base64 encoded)
+   * @param signerAddress - Ethereum address of the signer (must be registered in Gateway)
+   * @returns WorkflowStatus - Initial status of the created workflow
+   */
+  async submitWork(
+    studioAddress: string,
+    epoch: number,
+    agentAddress: string,
+    dataHash: string,
+    threadRoot: string,
+    evidenceRoot: string,
+    evidenceContent: Buffer | string,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    const evidenceBase64 = Buffer.isBuffer(evidenceContent)
+      ? evidenceContent.toString('base64')
+      : Buffer.from(evidenceContent, 'utf-8').toString('base64');
+
+    const payload = {
+      studio_address: studioAddress,
+      epoch,
+      agent_address: agentAddress,
+      data_hash: dataHash,
+      thread_root: threadRoot,
+      evidence_root: evidenceRoot,
+      evidence_base64: evidenceBase64,
+      signer_address: signerAddress,
+    };
+
+    const result = await this._request<any>('POST', '/workflows/work-submission', payload);
+    return this._parseWorkflowStatus(result);
+  }
+
+  /**
+   * Create a score submission workflow.
+   * POST /workflows/score-submission
+   *
+   * Supports two modes:
+   * - DIRECT (default): Simple direct scoring, requires workerAddress
+   * - COMMIT_REVEAL: Commit-reveal pattern, requires salt
+   *
+   * @param studioAddress - Ethereum address of the studio
+   * @param epoch - Epoch number
+   * @param validatorAddress - Ethereum address of the validator
+   * @param dataHash - Bytes32 hash of the work being scored (as hex string)
+   * @param scores - Array of dimension scores (0-10000 basis points)
+   * @param signerAddress - Ethereum address of the signer
+   * @param options - Additional options (workerAddress, salt, mode)
+   */
+  async submitScore(
+    studioAddress: string,
+    epoch: number,
+    validatorAddress: string,
+    dataHash: string,
+    scores: number[],
+    signerAddress: string,
+    options?: {
+      workerAddress?: string;
+      salt?: string;
+      mode?: ScoreSubmissionMode;
+    }
+  ): Promise<WorkflowStatus> {
+    const mode = options?.mode ?? ScoreSubmissionMode.DIRECT;
+
+    if (mode === ScoreSubmissionMode.DIRECT && !options?.workerAddress) {
+      throw new Error('workerAddress is required for DIRECT score scoring mode');
+    }
+
+    if (mode === ScoreSubmissionMode.COMMIT_REVEAL && !options?.salt) {
+      throw new Error('salt is required for COMMIT_REVEAL score scoring mode');
+    }
+
+    const payload: Record<string, any> = {
+      studio_address: studioAddress,
+      epoch: epoch,
+      validator_address: validatorAddress,
+      data_hash: dataHash,
+      scores,
+      signer_address: signerAddress,
+      mode: mode,
+    };
+
+    if (options?.workerAddress) {
+      payload.worker_address = options.workerAddress;
+    }
+
+    // Gateway requires salt field (event if unused in direct mode)
+    payload.salt = options?.salt ?? '0x' + '0'.repeat(64);
+    const result = await this._request<any>('POST', '/workflows/score-submission', payload);
+    return this._parseWorkflowStatus(result);
+  }
+
+  /**
+   * Create a close epoch workflow.
+   * POST /workflows/close-epoch
+   *
+   * This is economically final — cannot be undone.
+   *
+   * @param studioAddress - Ethereum address of the studio
+   * @param epoch - Epoch number to close
+   * @param signerAddress - Ethereum address of the signer
+   */
+  async closeEpoch(
+    studioAddress: string,
+    epoch: number,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    const payload = {
+      studio_address: studioAddress,
+      epoch,
+      signer_address: signerAddress,
+    };
+
+    const result = await this._request<any>('POST', '/workflows/close-epoch', payload);
+    return this._parseWorkflowStatus(result);
+  }
+
+  // ===========================================================================
+  // Workflow Status
+  // ===========================================================================
 }
