@@ -14,6 +14,7 @@ import {
   GatewayTimeoutError,
   WorkflowFailedError,
 } from './exceptions';
+import { Sign } from 'crypto';
 
 export class GatewayClient {
   private gatewayUrl: string;
@@ -273,4 +274,166 @@ export class GatewayClient {
   // ===========================================================================
   // Workflow Status
   // ===========================================================================
+
+  /**
+   * Get workflow status by ID.
+   * GET /workflows/{id}
+   */
+  async getWorkflow(workflowId: string): Promise<WorkflowStatus> {
+    const result = await this._request<any>('GET', `/workflows/${workflowId}`);
+    return this._parseWorkflowStatus(result);
+  }
+
+  /**
+   * List workflows with optional filters.
+   * GET /workflows?studio=&state=&type=
+   */
+  async listWorkflows(options?: {
+    studio?: string;
+    state?: string;
+    workflowType?: string;
+  }): Promise<WorkflowStatus[]> {
+    const params: string[] = [];
+    if (options?.studio) params.push(`studio=${options.studio}`);
+    if (options?.state) params.push(`state=${options.state}`);
+    if (options?.workflowType) params.push(`type=${options.workflowType}`);
+
+    const queryString = params.length > 0 ? `?${params.join('&')}` : '';
+    const result = await this._request<any>('GET', `/workflows${queryString}`);
+    return (result.workflows || []).map((w: any) => this._parseWorkflowStatus(w));
+  }
+
+  // ===========================================================================
+  // Polling and Waiting
+  // ===========================================================================
+
+  /**
+   * Poll workflow until it reaches a terminal state.
+   *
+   * @param workflowId - UUID of the workflow
+   * @param options - Polling options
+   * @throws WorkflowFailedError - If workflow reaches FAILED state
+   * @throws GatewayTimeoutError - If maxWait exceeded
+   */
+  async waitForCompletion(
+    workflowId: string,
+    options?: {
+      maxWait?: number;
+      pollInterval?: number;
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    const maxWait = options?.maxWait || this.maxPollTime;
+    const pollInterval = options?.pollInterval || this.pollInterval;
+    const startTime = Date.now();
+
+    while (true) {
+      const status = await this.getWorkflow(workflowId);
+
+      // Invoke progress callback if provided
+      if (options?.onProgress) {
+        options.onProgress(status);
+      }
+
+      if (status.state === WorkflowState.COMPLETED) {
+        return status;
+      }
+
+      if (status.state === WorkflowState.FAILED) {
+        throw new WorkflowFailedError(workflowId, status.error!);
+      }
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= maxWait) {
+        throw new GatewayTimeoutError(
+          workflowId,
+          `Workflow ${workflowId} did not complete within ${maxWait} ms.` +
+            `Current state: ${status.state}, step: ${status.step}`,
+          status
+        );
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+  }
+
+  // ===========================================================================
+  // Convenience Methods (submit + wait)
+  // ===========================================================================
+
+  /**
+   * Submit work and wait for completion.
+   */
+  async submitWorkAndWait(
+    studioAddress: string,
+    epoch: number,
+    agentAddress: string,
+    dataHash: string,
+    threadRoot: string,
+    evidenceRoot: string,
+    evidenceContent: Buffer | string,
+    signerAddress: string,
+    options?: {
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    const workflow = await this.submitWork(
+      studioAddress,
+      epoch,
+      agentAddress,
+      dataHash,
+      threadRoot,
+      evidenceRoot,
+      evidenceContent,
+      signerAddress
+    );
+
+    return this.waitForCompletion(workflow.workflowId, options);
+  }
+
+  /**
+   * Submit score and wait for completion.
+   */
+  async submitScoreAndWait(
+    studioAddress: string,
+    epoch: number,
+    validatorAddress: string,
+    dataHash: string,
+    scores: number[],
+    signerAddress: string,
+    options?: {
+      workAddress?: string;
+      salt?: string;
+      mode?: ScoreSubmissionMode;
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    const workflow = await this.submitScore(
+      studioAddress,
+      epoch,
+      validatorAddress,
+      dataHash,
+      scores,
+      signerAddress,
+      options
+    );
+
+    return this.waitForCompletion(workflow.workflowId, { onProgress: options?.onProgress });
+  }
+
+  /**
+   * Close epoch and wait for completion.
+   */
+  async closeEpochAndWait(
+    studioAddress: string,
+    epoch: number,
+    signerAddress: string,
+    options?: {
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    const workflow = await this.closeEpoch(studioAddress, epoch, signerAddress);
+    return this.waitForCompletion(workflow.workflowId, options);
+  }
 }
