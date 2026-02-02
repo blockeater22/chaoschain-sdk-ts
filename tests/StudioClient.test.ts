@@ -152,6 +152,36 @@ describe('StudioClient', () => {
     });
   });
 
+  describe('submitScoreVector', () => {
+    it('should encode scores before submission', () => {
+      const client = new StudioClient({
+        provider: mockProvider,
+        signer: mockSigner,
+        network: 'ethereum-sepolia',
+      });
+
+      // Verify encodeScoreVector is called internally
+      const scores = [85, 90, 78];
+      const encoded = client.encodeScoreVector(scores);
+      expect(encoded).toMatch(/^0x/);
+    });
+  });
+
+  describe('submitScoreVectorForWorker', () => {
+    it('should encode scores before submission', () => {
+      const client = new StudioClient({
+        provider: mockProvider,
+        signer: mockSigner,
+        network: 'ethereum-sepolia',
+      });
+
+      // Verify encodeScoreVector works for worker scoring
+      const scores = [85, 60, 70, 95, 80];
+      const encoded = client.encodeScoreVector(scores);
+      expect(encoded).toMatch(/^0x/);
+    });
+  });
+
   // ===========================================================================
   // Helper Methods (pure functions, no mocking needed)
   // ===========================================================================

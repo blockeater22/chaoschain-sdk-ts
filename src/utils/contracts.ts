@@ -789,6 +789,29 @@ export const STUDIO_PROXY_ABI = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  // Direct Score Submission (alternative to commit-reveal)
+  {
+    inputs: [
+      { name: 'dataHash', type: 'bytes32' },
+      { name: 'scoreVector', type: 'bytes' },
+    ],
+    name: 'submitScoreVector',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  // Per-Worker Score Submission (for multi-agent tasks)
+  {
+    inputs: [
+      { name: 'dataHash', type: 'bytes32' },
+      { name: 'workerAddress', type: 'address' },
+      { name: 'scoreVector', type: 'bytes' },
+    ],
+    name: 'submitScoreVectorForWorker',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
   // Rewards
   {
     inputs: [{ name: 'account', type: 'address' }],

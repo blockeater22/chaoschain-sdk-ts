@@ -195,6 +195,9 @@ export class StudioClient {
   /**
    * Commit a score (commit phase of commit-reveal).
    *
+   * NOTE: For production, use Gateway.submitScore() with mode=COMMIT_REVEAL.
+   * The Gateway handles workflow management, crash recovery, and proper sequencing.
+   *
    * @param studioAddress - Address of the Studio proxy
    * @param dataHash - DataHash of the work being scored (bytes32)
    * @param commitment - keccak256(abi.encodePacked(scoreVector, salt, dataHash))
@@ -210,6 +213,9 @@ export class StudioClient {
 
   /**
    * Reveal a score (reveal phase of commit-reveal).
+   *
+   * NOTE: For production, use Gateway.submitScore() with mode=COMMIT_REVEAL.
+   * The Gateway handles the full commit-reveal lifecycle automatically.
    *
    * @param studioAddress - Address of the Studio proxy
    * @param dataHash - DataHash of the work being scored (bytes32)
@@ -230,12 +236,80 @@ export class StudioClient {
     return receipt.hash;
   }
 
+  /**
+   * Submit score vector directly (simpler alternative to commit-reveal).
+   *
+   * NOTE: For production, use Gateway.submitScore() with mode=DIRECT.
+   * The Gateway handles workflow management and crash recovery.
+   *
+   * Use this direct method only for:
+   * - Local testing and development
+   * - Admin operations requiring low-level control
+   * - Studios that don't require commit-reveal protection
+   *
+   * @param studioAddress - Address of the Studio proxy
+   * @param dataHash - DataHash of the work being scored (bytes32)
+   * @param scores - Multi-dimensional scores [0-100 each]
+   * @returns Transaction hash
+   */
+  async submitScoreVector(
+    studioAddress: string,
+    dataHash: string,
+    scores: number[]
+  ): Promise<string> {
+    const studio = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, this.signer);
+
+    const scoreVector = this.encodeScoreVector(scores);
+    const tx = await studio.submitScoreVector(dataHash, scoreVector);
+    const receipt = await tx.wait();
+    return receipt.hash;
+  }
+
+  /**
+   * Submit score vector for a SPECIFIC WORKER in multi-agent tasks.
+   *
+   * NOTE: For production, use Gateway.submitScore() which handles per-worker
+   * scoring automatically based on DKG causal analysis.
+   *
+   * This direct method is for:
+   * - Local testing and development
+   * - Admin operations requiring low-level control
+   *
+   * How multi-agent scoring works:
+   * - Each verifier evaluates EACH WORKER from DKG causal analysis
+   * - Submits separate score vector for each worker
+   * - Contract calculates per-worker consensus
+   * - Each worker gets THEIR OWN reputation scores
+   *
+   * @param studioAddress - Address of the Studio proxy
+   * @param dataHash - DataHash of the work being scored (bytes32)
+   * @param workerAddress - Address of the worker being scored
+   * @param scores - Multi-dimensional scores for THIS worker [0-100 each]
+   * @returns Transaction hash
+   */
+  async submitScoreVectorForWorker(
+    studioAddress: string,
+    dataHash: string,
+    workerAddress: string,
+    scores: number[]
+  ): Promise<string> {
+    const studio = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, this.signer);
+
+    const scoreVector = this.encodeScoreVector(scores);
+    const tx = await studio.submitScoreVectorForWorker(dataHash, workerAddress, scoreVector);
+    const receipt = await tx.wait();
+    return receipt.hash;
+  }
+
   // ===========================================================================
   // Epoch Management
   // ===========================================================================
 
   /**
    * Close an epoch and trigger reward distribution.
+   *
+   * NOTE: For production, use Gateway.closeEpoch() which handles
+   * workflow management, logging, and crash recovery.
    *
    * @param studioAddress - Address of the Studio proxy
    * @param epoch - Epoch number to close
