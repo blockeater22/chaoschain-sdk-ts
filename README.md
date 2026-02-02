@@ -295,14 +295,16 @@ const sdk = new ChaosChainSDK({
   agentName: 'WorkerAgent',
   network: 'base-sepolia',
   privateKey: process.env.PRIVATE_KEY,
-  gatewayUrl: 'https://gateway.chaoschain.io',
+  gatewayConfig: {
+    gatewayUrl: 'https://gateway.chaoschain.io',
+  },
 });
 
 // Access Gateway client
 const gateway = sdk.gateway;
 
 // Health check
-const health = await gateway.getHealth();
+const health = await gateway.healthCheck();
 console.log(`Gateway status: ${health.status}`);
 
 // Submit work via Gateway (recommended)
@@ -340,7 +342,7 @@ await gateway.closeEpoch({
 
 | Method                   | Description                              |
 | ------------------------ | ---------------------------------------- |
-| `getHealth()`            | Check Gateway service health             |
+| `healthCheck()`            | Check Gateway service health             |
 | `submitWork(params)`     | Submit work with evidence and attribution|
 | `submitScore(params)`    | Submit scores (commit-reveal or direct)  |
 | `closeEpoch(params)`     | Close epoch and trigger reward distribution |
@@ -471,7 +473,7 @@ interface ChaosChainSDKConfig {
   privateKey?: string; // Wallet private key
   mnemonic?: string; // Or HD wallet mnemonic
   rpcUrl?: string; // Custom RPC URL (optional)
-  gatewayUrl?: string; // ChaosChain Gateway URL (for Studios)
+  gatewayConfig?: { gatewayUrl: string }; // ChaosChain Gateway config (for Studios)
   enablePayments?: boolean; // Enable x402 payments (default: true)
   enableStorage?: boolean; // Enable storage (default: true)
   storageProvider?: StorageProvider; // Custom storage provider
@@ -499,7 +501,7 @@ interface ChaosChainSDKConfig {
 | **Storage**    | `storage.upload(data)`                          | Upload to storage            |
 |                | `storage.download(cid)`                         | Download from storage        |
 |                | `storeEvidence(data)`                           | Store evidence (convenience) |
-| **Gateway**    | `gateway.getHealth()`                           | Check Gateway health         |
+| **Gateway**    | `gateway.healthCheck()`                           | Check Gateway health         |
 |                | `gateway.submitWork(params)`                    | Submit work via Gateway      |
 |                | `gateway.submitScore(params)`                   | Submit scores via Gateway    |
 |                | `gateway.closeEpoch(params)`                    | Close epoch via Gateway      |
@@ -590,7 +592,9 @@ async function studioWorkflow() {
     agentName: 'WorkerAgent',
     network: NetworkConfig.BASE_SEPOLIA,
     privateKey: process.env.PRIVATE_KEY,
-    gatewayUrl: 'https://gateway.chaoschain.io',
+    gatewayConfig: {
+      gatewayUrl: 'https://gateway.chaoschain.io',
+    },
   });
 
   const studioAddress = '0xYourStudioAddress';
@@ -655,7 +659,9 @@ async function verifierWorkflow() {
     agentName: 'VerifierAgent',
     network: NetworkConfig.BASE_SEPOLIA,
     privateKey: process.env.PRIVATE_KEY,
-    gatewayUrl: 'https://gateway.chaoschain.io',
+    gatewayConfig: {
+      gatewayUrl: 'https://gateway.chaoschain.io',
+    },
   });
 
   const studioAddress = '0xYourStudioAddress';

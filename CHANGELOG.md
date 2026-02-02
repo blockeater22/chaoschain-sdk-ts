@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Gateway Integration
 - **GatewayClient**: Full Gateway service integration for workflow orchestration
-  - `getHealth()`: Check Gateway service health
+  - `healthCheck()`: Check Gateway service health
   - `submitWork()`: Submit work with evidence and multi-agent attribution
   - `submitScore()`: Submit scores with commit-reveal or direct mode
   - `closeEpoch()`: Close epoch and trigger reward distribution

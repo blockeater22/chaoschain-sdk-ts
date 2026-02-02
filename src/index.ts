@@ -177,7 +177,7 @@ export type { XMTPMessageData, DKGNodeData } from './types';
 // ============================================================================
 // Version Info
 // ============================================================================
-export const SDK_VERSION = '0.1.3';
+export const SDK_VERSION = '0.2.0';
 export const ERC8004_VERSION = '1.0';
 export const X402_VERSION = '1.0';
 
