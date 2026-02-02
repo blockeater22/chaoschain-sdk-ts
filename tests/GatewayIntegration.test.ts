@@ -42,7 +42,7 @@ describe('Gateway Integration', () => {
   describe('Health Check', () => {
     it('should return health status', async () => {
       if (!gatewayAvailable) {
-        console.log('⏭️  Skipping: Gateway not available at', GATEWAY_URL);
+        console.log('[SKIP] Gateway not available at', GATEWAY_URL);
         return;
       }
 
@@ -55,7 +55,7 @@ describe('Gateway Integration', () => {
 
     it('should return true for isHealthy', async () => {
       if (!gatewayAvailable) {
-        console.log('⏭️  Skipping: Gateway not available at', GATEWAY_URL);
+        console.log('[SKIP] Gateway not available at', GATEWAY_URL);
         return;
       }
 
@@ -68,7 +68,7 @@ describe('Gateway Integration', () => {
   describe('Workflow Operations', () => {
     it('should list workflows for a studio', async () => {
       if (!gatewayAvailable) {
-        console.log('⏭️  Skipping: Gateway not available at', GATEWAY_URL);
+        console.log('[SKIP] Gateway not available at', GATEWAY_URL);
         return;
       }
 
@@ -80,14 +80,14 @@ describe('Gateway Integration', () => {
         expect(Array.isArray(result)).toBe(true);
       } catch (error: any) {
         // Gateway may return error for non-existent studio - that's OK
-        console.log('⏭️  listWorkflows returned error (expected):', error.message);
+        console.log('[SKIP] listWorkflows returned error (expected):', error.message);
         expect(error).toBeDefined();
       }
     });
 
     it('should handle non-existent workflow gracefully', async () => {
       if (!gatewayAvailable) {
-        console.log('⏭️  Skipping: Gateway not available at', GATEWAY_URL);
+        console.log('[SKIP] Gateway not available at', GATEWAY_URL);
         return;
       }
 
@@ -106,10 +106,10 @@ describe('Gateway Integration', () => {
       expect(typeof available).toBe('boolean');
 
       if (available) {
-        console.log('✅ Gateway is available at', GATEWAY_URL);
+        console.log('[OK] Gateway is available at', GATEWAY_URL);
       } else {
-        console.log('ℹ️  Gateway is not running at', GATEWAY_URL);
-        console.log('   To run integration tests, start the Gateway first.');
+        console.log('[INFO] Gateway is not running at', GATEWAY_URL);
+        console.log('       To run integration tests, start the Gateway first.');
       }
     });
   });
