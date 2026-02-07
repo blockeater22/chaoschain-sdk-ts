@@ -15,6 +15,7 @@ import { ethers } from 'ethers';
 export enum NetworkConfig {
   ETHEREUM_SEPOLIA = 'ethereum-sepolia',
   BASE_SEPOLIA = 'base-sepolia',
+  OPTIMISM_SEPOLIA = 'optimism-sepolia',
   LINEA_SEPOLIA = 'linea-sepolia',
   HEDERA_TESTNET = 'hedera-testnet',
   MODE_TESTNET = 'mode-testnet',
@@ -24,14 +25,32 @@ export enum NetworkConfig {
 }
 
 /**
+ * W3C-compliant payment methods supported by the SDK.
+ */
+export enum PaymentMethod {
+  BASIC_CARD = 'basic-card',
+  GOOGLE_PAY = 'https://google.com/pay',
+  APPLE_PAY = 'https://apple.com/apple-pay',
+  PAYPAL = 'https://paypal.com',
+  A2A_X402 = 'https://a2a.org/x402',
+  DIRECT_TRANSFER = 'direct-transfer',
+}
+
+/**
  * Agent role in the ChaosChain network
  */
 export enum AgentRole {
-  SERVER = 'server',
+  WORKER = 'worker',
+  VERIFIER = 'verifier',
   CLIENT = 'client',
-  VALIDATOR = 'validator',
-  BOTH = 'both',
+  ORCHESTRATOR = 'orchestrator',
 }
+
+// Legacy aliases for backward compatibility (deprecated)
+/** @deprecated Use AgentRole.WORKER instead */
+export const AgentRoleSERVER = AgentRole.WORKER;
+/** @deprecated Use AgentRole.VERIFIER instead */
+export const AgentRoleVALIDATOR = AgentRole.VERIFIER;
 
 // ============================================================================
 // Contract Types
@@ -44,6 +63,17 @@ export interface ContractAddresses {
   identity: string;
   reputation: string;
   validation: string;
+  identityRegistry?: string;
+  reputationRegistry?: string;
+  validationRegistry?: string;
+  identity_registry?: string;
+  reputation_registry?: string;
+  validation_registry?: string;
+  rewardsDistributor?: string | null;
+  chaosCore?: string | null;
+  rewards_distributor?: string | null;
+  chaos_core?: string | null;
+  network?: NetworkConfig | null;
 }
 
 /**
@@ -181,20 +211,6 @@ export interface X402Payment {
   feeTxHash?: string;
 }
 
-/**
- * Payment receipt
- */
-export interface PaymentReceipt {
-  paymentId: string;
-  from: string;
-  to: string;
-  amount: string;
-  currency: string;
-  timestamp: number;
-  signature: string;
-  txHash: string;
-}
-
 // ============================================================================
 // Storage Provider Types
 // ============================================================================
@@ -215,6 +231,7 @@ export interface UploadResult {
   cid: string;
   uri: string;
   size?: number;
+  timestamp: number;
 }
 
 /**
@@ -244,13 +261,28 @@ export interface ComputeProvider {
 // ============================================================================
 
 /**
+ * Verification method
+ */
+export enum VerificationMethod {
+  TEE_ML = 'tee-ml', // Trusted Execution Environment
+  ZK_ML = 'zk-ml', // Zero-Knowledge Machine Learning
+  OP_ML = 'op-ml', // Optimistic Machine Learning
+  NONE = 'none', // No verification
+}
+
+/**
  * TEE attestation data
  */
 export interface TEEAttestation {
-  provider: 'phala' | 'sgx' | 'nitro' | 'zerog';
-  attestationData: string;
-  publicKey: string;
-  timestamp: number;
+  jobId: string;
+  provider: string;
+  executionHash: string;
+  verificationMethod: VerificationMethod;
+  model?: string;
+  attestationData: unknown;
+  proof?: string;
+  metadata?: unknown;
+  timestamp: string;
 }
 
 /**
@@ -259,14 +291,17 @@ export interface TEEAttestation {
 export interface IntegrityProof {
   proofId: string;
   functionName: string;
-  inputs: Record<string, unknown>;
-  outputs: Record<string, unknown>;
   codeHash: string;
   executionHash: string;
-  timestamp: number;
-  signature: string;
+  timestamp: Date;
+  agentName: string;
+  verificationStatus: string;
   ipfsCid?: string;
-  teeAttestation?: TEEAttestation;
+  // TEE (Trusted Execution Environment) attestation fields
+  teeAttestation?: TEEAttestation; // Full TEE attestation data
+  teeProvider?: string; // e.g., "0g-compute", "phala"
+  teeJobId?: string; //  TEE provider's job/task ID
+  teeExecutionHash?: string; // TEE-specific execution hash
 }
 
 // ============================================================================
@@ -292,10 +327,12 @@ export interface ChaosChainSDKConfig {
   computeProvider?: ComputeProvider;
   walletFile?: string;
   // x402 Facilitator Configuration (EIP-3009)
-  facilitatorUrl?: string;     // e.g., 'https://facilitator.chaoscha.in'
-  facilitatorApiKey?: string;  // Optional API key for managed facilitator
+  facilitatorUrl?: string; // e.g., 'https://facilitator.chaoscha.in'
+  facilitatorApiKey?: string; // Optional API key for managed facilitator
   facilitatorMode?: 'managed' | 'decentralized';
-  agentId?: string;            // ERC-8004 tokenId (e.g., '8004#123')
+  agentId?: string; // ERC-8004 tokenId (e.g., '8004#123')
+  // Gateway Client Configuration
+  gatewayConfig?: GatewayClientConfig;
 }
 
 /**
@@ -382,3 +419,191 @@ export interface ErrorResponse {
   details?: unknown;
 }
 
+/**
+ * Agent identity
+ */
+export interface AgentIdentity {
+  agentId: bigint;
+  agentName: string;
+  agentDomain: string;
+  walletAddress: string;
+  registrationTx: string;
+  network: NetworkConfig;
+}
+
+/**
+ * Proof of Payment Execution
+ */
+export interface PaymentProof {
+  paymentId: string;
+  fromAgent: string;
+  toAgent: string;
+  amount: number;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  transactionHash: string;
+  timestamp: Date;
+  receiptData: Record<string, unknown>;
+  network?: string;
+}
+
+/**
+ * Proof of Validation Execution
+ */
+export interface ValidationResult {
+  validationId: string;
+  validatorAgentId: number;
+  score: number;
+  qualityRating: string;
+  validationSummary: string;
+  detailedAssessment: Record<string, unknown>;
+  timestamp: Date;
+  ipfsCid?: string;
+}
+
+// ============================================================================
+// Gateway & Workflow Types
+// Ref: /chaoschain/packages/sdk/chaoschain_sdk/gateway_client.py
+// ============================================================================
+
+/**
+ * Workflow types supported by Gateway.
+ */
+export enum WorkflowType {
+  WORK_SUBMISSION = 'WorkSubmission',
+  SCORE_SUBMISSION = 'ScoreSubmission',
+  CLOSE_EPOCH = 'CloseEpoch',
+}
+
+/**
+ * Workflow states.
+ */
+export enum WorkflowState {
+  CREATED = 'CREATED',
+  RUNNING = 'RUNNING',
+  STALLED = 'STALLED',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+/**
+ * Score submission modes supported by Gateway.
+ * - DIRECT: Simple direct scoring via submitScoreVectorForWorker (default, MVP)
+ * - COMMIT_REVEAL: Commit-reveal pattern (prevents last-mover bias)
+ */
+export enum ScoreSubmissionMode {
+  DIRECT = 'direct',
+  COMMIT_REVEAL = 'commit_reveal',
+}
+
+/**
+ * Progress data for a workflow.
+ * Populated as the workflow progresses through steps.
+ */
+export interface WorkflowProgress {
+  /** Arweave transaction ID for evidence archival */
+  arweaveTxId?: string;
+  /** Whether Arweave transaction is confirmed */
+  arweaveConfirmed?: boolean;
+  /** On-chain transaction hash */
+  onchainTxHash?: string;
+  /** Whether on-chain transaction is confirmed */
+  onchainConfirmed?: boolean;
+  /** Block number of on-chain confirmation */
+  onchainBlock?: number;
+  /** Score submission transaction hash (direct mode) */
+  scoreTxHash?: string;
+  /** Commit transaction hash (commit-reveal mode) */
+  commitTxHash?: string;
+  /** Reveal transaction hash (commit-reveal mode) */
+  revealTxHash?: string;
+}
+
+/**
+ * Error information for a failed workflow.
+ */
+export interface WorkflowError {
+  /** Step where the error occurred */
+  step: string;
+  /** Human-readable error message */
+  message: string;
+  /** Optional error code */
+  code?: string;
+}
+
+/**
+ * Status of a workflow.
+ */
+export interface WorkflowStatus {
+  /** Unique workflow identifier (UUID) */
+  workflowId: string;
+  /** Type of workflow */
+  workflowType: WorkflowType;
+  /** Current state */
+  state: WorkflowState;
+  /** Current step name */
+  step: string;
+  /** Unix timestamp of creation */
+  createdAt: number;
+  /** Unix timestamp of last update */
+  updatedAt: number;
+  /** Progress information */
+  progress: WorkflowProgress;
+  /** Error information (if state is FAILED) */
+  error?: WorkflowError;
+}
+
+/**
+ * Gateway client configuration.
+ */
+export interface GatewayClientConfig {
+  /** Gateway API URL (e.g., "http://localhost:3000") */
+  gatewayUrl: string;
+  /** Request timeout in milliseconds (default: 30000) */
+  timeout?: number;
+  /** Maximum time to wait for workflow completion in milliseconds (default: 300000) */
+  maxPollTime?: number;
+  /** Interval between status polls in milliseconds (default: 2000) */
+  pollInterval?: number;
+}
+
+// ============================================================================
+// Deprecated Types (backward compatibility only)
+// These types existed in early designs but functionality moved to Gateway
+// ============================================================================
+
+/**
+ * @deprecated XMTP functionality has moved to the Gateway service.
+ * This type is kept for backward compatibility only.
+ * Do NOT implement XMTP client in SDK - use Gateway instead.
+ */
+export interface XMTPMessageData {
+  messageId: string;
+  fromAgent: string;
+  toAgent: string;
+  content: any;
+  timestamp: number;
+  parentIds: string[];
+  artifactIds: string[];
+  signature: string;
+}
+
+/**
+ * @deprecated DKG functionality has moved to the Gateway service.
+ * This type is kept for backward compatibility only.
+ * Do NOT implement DKG in SDK - Gateway constructs the graph.
+ */
+export interface DKGNodeData {
+  author: string;
+  sig: string;
+  ts: number;
+  xmtpMsgId: string;
+  artifactIds: string[];
+  payloadHash: string;
+  parents: string[];
+  content?: string;
+  nodeType?: string;
+  metadata?: Record<string, any>;
+  vlc?: string;
+  canonicalHash?: string;
+}

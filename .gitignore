@@ -9,9 +9,12 @@ coverage/
 
 sdk
 *.md
+!CHANGELOG.md
 !README.md
 !CONTRIBUTING.md
 !MERCHANT_GUIDE.md
+
+docs/
 
 keys/
 test-facilitator-curl.sh

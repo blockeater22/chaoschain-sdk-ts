@@ -21,17 +21,20 @@ import {
   AgentMetadata,
   AgentRegistration,
   FeedbackParams,
-  ValidationRequestParams,
   UploadResult,
   UploadOptions,
   ComputeProvider,
 } from './types';
-import { PaymentMethod } from './PaymentManager';
+import { PaymentMethod } from './types';
 import { getNetworkInfo, getContractAddresses } from './utils/networks';
+//
+import { GatewayClient } from './GatewayClient';
+import { StudioClient } from './StudioClient';
+import type { WorkflowStatus, ScoreSubmissionMode } from './types';
 
 /**
  * Main ChaosChain SDK Class - Complete TypeScript implementation
- * 
+ *
  * Features:
  * - ERC-8004 v1.0 on-chain identity, reputation, and validation
  * - x402 crypto payments (USDC/ETH)
@@ -57,6 +60,12 @@ export class ChaosChainSDK {
   public googleAP2?: GoogleAP2Integration;
   public a2aX402Extension?: A2AX402Extension;
   public processIntegrity?: ProcessIntegrity;
+
+  // Gateway client for workflow submission (optional)
+  public gateway: GatewayClient | null = null;
+
+  // Studio client for direct on-chain operations
+  public studio: StudioClient;
 
   // Configuration
   public readonly agentName: string;
@@ -123,7 +132,7 @@ export class ChaosChainSDK {
           facilitatorUrl: config.facilitatorUrl,
           apiKey: config.facilitatorApiKey,
           mode: config.facilitatorMode,
-          agentId: config.agentId
+          agentId: config.agentId,
         }
       );
 
@@ -133,7 +142,7 @@ export class ChaosChainSDK {
         google_pay_merchant_id: process.env.GOOGLE_PAY_MERCHANT_ID,
         apple_pay_merchant_id: process.env.APPLE_PAY_MERCHANT_ID,
         paypal_client_id: process.env.PAYPAL_CLIENT_ID,
-        paypal_client_secret: process.env.PAYPAL_CLIENT_SECRET
+        paypal_client_secret: process.env.PAYPAL_CLIENT_SECRET,
       };
 
       this.paymentManager = new PaymentManager(
@@ -159,16 +168,30 @@ export class ChaosChainSDK {
       );
     }
 
+    // Initialize compute provider (if provided)
+    this.computeProvider = config.computeProvider;
+
     // Initialize Process Integrity (if enabled)
     if (config.enableProcessIntegrity !== false) {
       this.processIntegrity = new ProcessIntegrity(
-        this.storageBackend,
-        this.computeProvider
+        this.agentName,
+        this.storageBackend as any,
+        this.computeProvider as any
       );
     }
 
-    // Initialize compute provider (if provided)
-    this.computeProvider = config.computeProvider;
+    // Initialize Gateway client (if config provided)
+    if (config.gatewayConfig) {
+      this.gateway = new GatewayClient(config.gatewayConfig);
+      console.log(`🌐 Gateway client initialized: ${config.gatewayConfig.gatewayUrl}`);
+    }
+
+    // Initialize Studio client for direct on-chain operations
+    this.studio = new StudioClient({
+      provider: this.provider,
+      signer: this.walletManager.getWallet(),
+      network: typeof config.network === 'string' ? config.network : config.network,
+    });
 
     console.log(`🚀 ChaosChain SDK initialized for ${this.agentName}`);
     console.log(`   Network: ${this.network}`);
@@ -237,7 +260,12 @@ export class ChaosChainSDK {
     indexLimit: bigint,
     expiry: bigint
   ): Promise<string> {
-    return this.chaosAgent.generateFeedbackAuthorization(agentId, clientAddress, indexLimit, expiry);
+    return this.chaosAgent.generateFeedbackAuthorization(
+      agentId,
+      clientAddress,
+      indexLimit,
+      expiry
+    );
   }
 
   /**
@@ -261,19 +289,22 @@ export class ChaosChainSDK {
       ...feedbackData,
       score,
       proof_of_payment: paymentProof,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     // Upload to storage
     const feedbackJson = JSON.stringify(fullFeedbackData);
-    const result = await (this.storageBackend as any).put(Buffer.from(feedbackJson), 'application/json');
+    const result = await (this.storageBackend as any).put(
+      Buffer.from(feedbackJson),
+      'application/json'
+    );
     const feedbackUri = `ipfs://${result.cid}`;
 
     // Submit feedback on-chain
     const txHash = await this.chaosAgent.giveFeedback({
       agentId,
       rating: score,
-      feedbackUri
+      feedbackUri,
     });
 
     console.log(`✅ Feedback submitted with payment proof`);
@@ -349,7 +380,13 @@ export class ChaosChainSDK {
     responseHash: string,
     tag?: string
   ): Promise<string> {
-    return this.chaosAgent.respondToValidation(requestHash, response, responseUri, responseHash, tag);
+    return this.chaosAgent.respondToValidation(
+      requestHash,
+      response,
+      responseUri,
+      responseHash,
+      tag
+    );
   }
 
   /**
@@ -394,7 +431,13 @@ export class ChaosChainSDK {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
     }
-    return this.x402PaymentManager.createPaymentRequest(fromAgent, toAgent, amount, currency, serviceDescription);
+    return this.x402PaymentManager.createPaymentRequest(
+      fromAgent,
+      toAgent,
+      amount,
+      currency,
+      serviceDescription
+    );
   }
 
   /**
@@ -417,12 +460,17 @@ export class ChaosChainSDK {
     amount: number,
     currency: string = 'USDC',
     serviceDescription: string = 'AI Agent Service',
-    expiryMinutes: number = 30
+    evidenceCid?: string
   ): Record<string, any> {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
     }
-    return this.x402PaymentManager.createPaymentRequirements(amount, currency, serviceDescription, expiryMinutes);
+    return this.x402PaymentManager.createPaymentRequirements(
+      amount,
+      currency,
+      serviceDescription,
+      evidenceCid
+    );
   }
 
   /**
@@ -500,7 +548,12 @@ export class ChaosChainSDK {
     if (!this.paymentManager) {
       throw new Error('Payment manager not enabled');
     }
-    return this.paymentManager.executeTraditionalPayment(paymentMethod, amount, currency, paymentData);
+    return this.paymentManager.executeTraditionalPayment(
+      paymentMethod,
+      amount,
+      currency,
+      paymentData
+    );
   }
 
   /**
@@ -540,7 +593,13 @@ export class ChaosChainSDK {
     if (!this.googleAP2) {
       throw new Error('Google AP2 not enabled');
     }
-    return this.googleAP2.createIntentMandate(userDescription, merchants, skus, requiresRefundability, expiryMinutes);
+    return this.googleAP2.createIntentMandate(
+      userDescription,
+      merchants,
+      skus,
+      requiresRefundability,
+      expiryMinutes
+    );
   }
 
   /**
@@ -557,7 +616,14 @@ export class ChaosChainSDK {
     if (!this.googleAP2) {
       throw new Error('Google AP2 not enabled');
     }
-    return this.googleAP2.createCartMandate(cartId, items, totalAmount, currency, merchantName, expiryMinutes);
+    return this.googleAP2.createCartMandate(
+      cartId,
+      items,
+      totalAmount,
+      currency,
+      merchantName,
+      expiryMinutes
+    );
   }
 
   /**
@@ -624,7 +690,8 @@ export class ChaosChainSDK {
 
     return {
       cid: result.cid,
-      uri: result.url || `ipfs://${result.cid}`
+      uri: result.url || `ipfs://${result.cid}`,
+      timestamp: Date.now(),
     };
   }
 
@@ -646,7 +713,10 @@ export class ChaosChainSDK {
    * Store evidence (convenience method)
    */
   async storeEvidence(evidenceData: Record<string, any>): Promise<string> {
-    const result = await (this.storageBackend as any).put(Buffer.from(JSON.stringify(evidenceData)), 'application/json');
+    const result = await (this.storageBackend as any).put(
+      Buffer.from(JSON.stringify(evidenceData)),
+      'application/json'
+    );
     console.log(`📦 Stored evidence: ${result.cid}`);
     return result.cid;
   }
@@ -665,7 +735,7 @@ export class ChaosChainSDK {
   /**
    * Get wallet balance
    */
-  async getBalance(): Promise<string> {
+  async getBalance(): Promise<bigint> {
     return this.walletManager.getBalance();
   }
 
@@ -674,6 +744,13 @@ export class ChaosChainSDK {
    */
   getNetworkInfo() {
     return this.networkInfo;
+  }
+
+  /**
+   * Get SDK version
+   */
+  getVersion(): string {
+    return '0.1.3';
   }
 
   /**
@@ -696,12 +773,157 @@ export class ChaosChainSDK {
         google_ap2_intents: !!this.googleAP2,
         process_integrity: !!this.processIntegrity,
         storage: true,
-        compute: !!this.computeProvider
+        compute: !!this.computeProvider,
       },
-      supported_payment_methods: this.paymentManager ? this.paymentManager.getSupportedPaymentMethods() : [],
-      storage_backends: this.storageBackend instanceof AutoStorageManager 
-        ? (this.storageBackend as AutoStorageManager).getAvailableBackends() 
-        : [this.storageBackend.constructor.name]
+      supported_payment_methods: this.paymentManager
+        ? this.paymentManager.getSupportedPaymentMethods()
+        : [],
+      storage_backends:
+        this.storageBackend instanceof AutoStorageManager
+          ? (this.storageBackend as AutoStorageManager).getAvailableBackends()
+          : [this.storageBackend.constructor.name],
     };
+  }
+
+  /**
+   * Check if Gateway is configured.
+   */
+  isGatewayEnabled(): boolean {
+    return this.gateway !== null;
+  }
+
+  /**
+   * Get Gateway client instance.
+   * @throws Error if Gateway is not configured
+   */
+  getGateway(): GatewayClient {
+    if (!this.gateway) {
+      throw new Error(`Gateway not configured pass gatewayConfig to SDK constructor`);
+    }
+    return this.gateway;
+  }
+
+  /**
+   * Submit work via Gateway.
+   *
+   * The Gateway handles XMTP, DKG, Arweave archival, and on-chain submission.
+   */
+  async submitWorkViaGateway(
+    studioAddress: string,
+    epoch: number,
+    agentAddress: string,
+    dataHash: string,
+    threadRoot: string,
+    evidenceRoot: string,
+    evidenceContent: Buffer | string,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().submitWork(
+      studioAddress,
+      epoch,
+      agentAddress,
+      dataHash,
+      threadRoot,
+      evidenceRoot,
+      evidenceContent,
+      signerAddress
+    );
+  }
+
+  /**
+   * Submit score via Gateway.
+   */
+  async submitScoreViaGateway(
+    studioAddress: string,
+    epoch: number,
+    validatorAddress: string,
+    dataHash: string,
+    scores: number[],
+    signerAddress: string,
+    options?: {
+      workerAddress?: string;
+      salt?: string;
+      mode?: ScoreSubmissionMode;
+    }
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().submitScore(
+      studioAddress,
+      epoch,
+      validatorAddress,
+      dataHash,
+      scores,
+      signerAddress,
+      options
+    );
+  }
+
+  /**
+   * Close epoch via Gateway.
+   * WARNING: This is economically final and cannot be undone.
+   */
+  async closeEpochViaGateway(
+    studioAddress: string,
+    epoch: number,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().closeEpoch(studioAddress, epoch, signerAddress);
+  }
+
+  /**
+   * Wait for workflow completion.
+   */
+  async waitWorkflow(
+    workflowId: string,
+    options?: {
+      maxWait?: number;
+      pollInterval?: number;
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().waitForCompletion(workflowId, options);
+  }
+
+  // ============================================================================
+  // Studio Direct On-Chain Methods
+  // ============================================================================
+
+  /**
+   * Create a new Studio on ChaosChain.
+   * @see StudioClient.createStudio for full documentation
+   */
+  async createStudio(
+    name: string,
+    logicModuleAddress: string
+  ): Promise<{ proxyAddress: string; studioId: bigint }> {
+    return this.studio.createStudio(name, logicModuleAddress);
+  }
+
+  /**
+   * Register agent with a Studio.
+   * @see StudioClient.registerWithStudio for full documentation
+   */
+  async registerWithStudio(
+    studioAddress: string,
+    agentId: string,
+    role: number,
+    stakeAmount?: bigint
+  ): Promise<string> {
+    return this.studio.registerWithStudio(studioAddress, agentId, role, stakeAmount);
+  }
+
+  /**
+   * Get pending rewards for an account.
+   * @see StudioClient.getPendingRewards for full documentation
+   */
+  async getStudioPendingRewards(studioAddress: string, account: string): Promise<bigint> {
+    return this.studio.getPendingRewards(studioAddress, account);
+  }
+
+  /**
+   * Withdraw pending rewards from a Studio.
+   * @see StudioClient.withdrawRewards for full documentation
+   */
+  async withdrawStudioRewards(studioAddress: string): Promise<string> {
+    return this.studio.withdrawRewards(studioAddress);
   }
 }

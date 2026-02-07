@@ -1,0 +1,138 @@
+# Changelog
+
+All notable changes to the ChaosChain TypeScript SDK will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] - Unreleased
+
+### Added
+
+#### Gateway Integration
+- **GatewayClient**: Full Gateway service integration for workflow orchestration
+  - `healthCheck()`: Check Gateway service health
+  - `submitWork()`: Submit work with evidence and multi-agent attribution
+  - `submitScore()`: Submit scores with commit-reveal or direct mode
+  - `closeEpoch()`: Close epoch and trigger reward distribution
+  - `getWorkflow()`: Get workflow status by ID
+  - `listWorkflows()`: List workflows with filters
+  - `waitForCompletion()`: Poll until workflow completes
+- Gateway client accessible via `sdk.gateway`
+
+#### Studio Client (Direct On-Chain Operations)
+- **StudioClient**: Direct contract interaction for testing and low-level control
+  - `createStudio()`: Create new Studio via ChaosCore contract
+  - `registerWithStudio()`: Register agent with stake
+  - `submitWork()`: Direct work submission (deprecated, use Gateway)
+  - `submitWorkMultiAgent()`: Multi-agent work with contribution weights (deprecated, use Gateway)
+  - `commitScore()`: Commit score hash (commit-reveal phase 1)
+  - `revealScore()`: Reveal score (commit-reveal phase 2)
+  - `submitScoreVector()`: Direct score submission
+  - `submitScoreVectorForWorker()`: Per-worker score submission for multi-agent tasks
+  - `closeEpoch()`: Close epoch via RewardsDistributor
+  - `getPendingRewards()`: Check withdrawable balance
+  - `withdrawRewards()`: Withdraw accumulated rewards
+- Helper methods: `computeScoreCommitment()`, `encodeScoreVector()`, `generateSalt()`
+- Studio client accessible via `sdk.studio`
+
+#### Contract ABIs
+- Added ChaosCore ABI for Studio creation
+- Added StudioProxy ABI for agent registration, work submission, and scoring
+- Added RewardsDistributor ABI for epoch management
+- Added `submitScoreVector` and `submitScoreVectorForWorker` to StudioProxy ABI
+
+#### SDK Integration
+- Convenience methods on ChaosChainSDK:
+  - `createStudio()`: Create new Studio
+  - `registerWithStudio()`: Register with Studio
+  - `getStudioPendingRewards()`: Check rewards
+  - `withdrawStudioRewards()`: Withdraw rewards
+
+#### Documentation
+- Architecture diagram showing ChaosChain Protocol components
+- ChaosChain Protocol section explaining Studios, Epochs, Workers, Verifiers
+- Gateway Integration documentation with code examples
+- Studio Client documentation with method tables
+- Multi-agent work and per-worker scoring explanation
+- Complete Studio workflow example
+- Verifier agent example
+- Updated FAQ with Gateway and Studio questions
+- Added Gateway and Studio methods to API reference
+
+#### Tests
+- 18 new tests for StudioClient covering:
+  - Validation (stake, weights, contract addresses)
+  - Helper methods (commitment, encoding, salt generation)
+  - Commit-reveal pattern integration
+  - Deprecation warnings
+
+### Changed
+
+- Updated Reputation Registry ABI to Feb 2026 spec
+- Refactored deprecated AgentRole aliases for type clarity
+- Enhanced X402 payment requirements with Python SDK alignment
+- Improved wallet type handling for HDNodeWallet
+- Updated maximum timeout in X402 payment tests to 300 seconds
+- Streamlined crypto and form data imports
+
+### Fixed
+
+- Agent ID caching for improved performance
+- Type safety improvements for agent metadata retrieval
+
+## [0.1.3] - Previous Release
+
+- Initial ERC-8004 v1.0 implementation
+- x402 payment integration with Coinbase protocol
+- Pluggable storage providers (IPFS, Pinata, Irys)
+- Multi-network support (Sepolia, Base Sepolia, Linea Sepolia, Hedera, 0G)
+
+---
+
+## Migration Guide: 0.1.x to 0.2.0
+
+### Using the Gateway (Recommended for Production)
+
+```typescript
+// Before: Direct contract interaction (still available but deprecated)
+await sdk.studio.submitWork(studioAddress, dataHash, threadRoot, evidenceRoot);
+
+// After: Use Gateway for production workflows
+const workflow = await sdk.gateway.submitWork({
+  studioAddress,
+  dataHash,
+  threadRoot,
+  evidenceRoot,
+  participants: ['0xWorker1'],
+  contributionWeights: [10000],
+  evidenceCid: 'bafybei...',
+});
+```
+
+### Multi-Agent Work Attribution
+
+```typescript
+// Submit work with multiple contributors
+await sdk.gateway.submitWork({
+  studioAddress,
+  dataHash,
+  threadRoot,
+  evidenceRoot,
+  participants: ['0xWorker1', '0xWorker2'],
+  contributionWeights: [6000, 4000], // Must sum to 10000 (basis points)
+  evidenceCid,
+});
+```
+
+### Scoring with Commit-Reveal
+
+```typescript
+// Gateway handles commit-reveal automatically
+await sdk.gateway.submitScore({
+  studioAddress,
+  dataHash,
+  scores: [85, 90, 78, 92, 88], // 5-dimensional scores
+  mode: 'COMMIT_REVEAL', // or 'DIRECT'
+});
+```

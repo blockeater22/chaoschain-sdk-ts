@@ -14,7 +14,7 @@ import { NetworkConfig } from '../src/types';
 describe('Network Configuration', () => {
   it('should get network info for Base Sepolia', () => {
     const info = getNetworkInfo(NetworkConfig.BASE_SEPOLIA);
-    
+
     expect(info).toBeDefined();
     expect(info.chainId).toBe(84532);
     expect(info.name).toBe('Base Sepolia Testnet');
@@ -24,15 +24,16 @@ describe('Network Configuration', () => {
 
   it('should get network info for Ethereum Sepolia', () => {
     const info = getNetworkInfo(NetworkConfig.ETHEREUM_SEPOLIA);
-    
+
     expect(info).toBeDefined();
     expect(info.chainId).toBe(11155111);
-    expect(info.contracts.identity).toBe('0x8004a6090Cd10A7288092483047B097295Fb8847');
+    // Updated to Feb 2026 ERC-8004 spec addresses
+    expect(info.contracts.identity).toBe('0x8004A818BFB912233c491871b3d84c89A494BD9e');
   });
 
   it('should get contract addresses', () => {
     const addresses = getContractAddresses(NetworkConfig.BASE_SEPOLIA);
-    
+
     expect(addresses).toBeDefined();
     expect(addresses.identity).toBe('0x8004AA63c570c570eBF15376c0dB199918BFe9Fb');
     expect(addresses.reputation).toBeDefined();
@@ -48,7 +49,7 @@ describe('Network Configuration', () => {
 
   it('should get all supported networks', () => {
     const networks = getSupportedNetworks();
-    
+
     expect(networks).toContain('base-sepolia');
     expect(networks).toContain('ethereum-sepolia');
     expect(networks).toContain('linea-sepolia');
@@ -58,7 +59,7 @@ describe('Network Configuration', () => {
 
   it('should get network info for BSC Testnet', () => {
     const info = getNetworkInfo(NetworkConfig.BSC_TESTNET);
-    
+
     expect(info).toBeDefined();
     expect(info.chainId).toBe(97);
     expect(info.name).toBe('BSC Testnet (Chapel)');
@@ -75,4 +76,3 @@ describe('Network Configuration', () => {
     );
   });
 });
-

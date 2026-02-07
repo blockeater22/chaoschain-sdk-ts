@@ -12,24 +12,14 @@
  */
 
 import { createHash } from 'crypto';
-import { IntegrityProof } from './types';
+import { IntegrityProof, TEEAttestation, VerificationMethod } from './types';
 import { IntegrityVerificationError } from './exceptions';
 
 export interface StorageProvider {
   uploadJson(data: any, filename: string): Promise<string>;
 }
 
-export interface TEEAttestation {
-  job_id: string;
-  provider: string;
-  execution_hash: string;
-  verification_method: string;
-  model?: string;
-  attestation_data: any;
-  proof?: string;
-  metadata?: any;
-  timestamp: string;
-}
+// TEEAttestation is imported from './types' - no duplicate definition needed
 
 export interface ComputeProvider {
   submit(task: any): Promise<string>;
@@ -47,11 +37,11 @@ export interface ComputeProvider {
 
 /**
  * Production-ready process integrity verifier for ChaosChain agents.
- * 
+ *
  * Provides dual-layer cryptographic proof:
  * 1. Local code hashing (SHA-256 of function code)
  * 2. Optional TEE attestations (hardware-verified execution from 0G Compute, AWS Nitro, etc.)
- * 
+ *
  * This enables the "Process Integrity" layer of the Triple-Verified Stack:
  * - Layer 1: AP2 Intent Verification (Google)
  * - Layer 2: Process Integrity (ChaosChain + TEE attestations) ← THIS MODULE
@@ -61,6 +51,7 @@ export class ProcessIntegrity {
   private agentName: string;
   private storageManager: StorageProvider | null;
   private computeProvider: ComputeProvider | null;
+  // eslint-disable-next-line @typescript-eslint/ban-types
   private registeredFunctions: Map<string, Function>;
   private functionHashes: Map<string, string>;
 
@@ -84,6 +75,7 @@ export class ProcessIntegrity {
   /**
    * Register a function for integrity checking.
    */
+  // eslint-disable-next-line @typescript-eslint/ban-types
   registerFunction(func: Function, functionName?: string): string {
     const name = functionName || func.name;
 
@@ -112,7 +104,7 @@ export class ProcessIntegrity {
     if (!this.registeredFunctions.has(functionName)) {
       const available = Array.from(this.registeredFunctions.keys());
       throw new IntegrityVerificationError(`Function not registered: ${functionName}`, {
-        available_functions: available
+        available_functions: available,
       });
     }
 
@@ -120,7 +112,9 @@ export class ProcessIntegrity {
     const codeHash = this.functionHashes.get(functionName)!;
 
     const executionMode = useTee && this.computeProvider ? 'local + TEE' : 'local';
-    console.log(`⚡ Executing with ChaosChain Process Integrity: ${functionName} (${executionMode})`);
+    console.log(
+      `⚡ Executing with ChaosChain Process Integrity: ${functionName} (${executionMode})`
+    );
 
     // Execute function
     const startTime = new Date();
@@ -164,7 +158,7 @@ export class ProcessIntegrity {
     } catch (e) {
       throw new IntegrityVerificationError(`Function execution failed: ${e}`, {
         function_name: functionName,
-        inputs
+        inputs,
       });
     }
   }
@@ -172,6 +166,7 @@ export class ProcessIntegrity {
   /**
    * Generate a hash of the function's code.
    */
+  // eslint-disable-next-line @typescript-eslint/ban-types
   private generateCodeHash(func: Function): string {
     try {
       // Get function source code
@@ -192,7 +187,7 @@ export class ProcessIntegrity {
   private async getTeeAttestation(
     functionName: string,
     inputs: Record<string, any>,
-    result: any
+    _result: any
   ): Promise<TEEAttestation | null> {
     if (!this.computeProvider) {
       return null;
@@ -206,7 +201,7 @@ export class ProcessIntegrity {
         function: functionName,
         inputs,
         model: 'gpt-oss-120b', // Default model for 0G Compute
-        prompt: `Execute function: ${functionName} with inputs: ${JSON.stringify(inputs)}`
+        prompt: `Execute function: ${functionName} with inputs: ${JSON.stringify(inputs)}`,
       };
 
       const jobId = await this.computeProvider.submit(taskData);
@@ -231,17 +226,16 @@ export class ProcessIntegrity {
             console.log(`   Execution Hash: ${computeResult.execution_hash}`);
             console.log(`   Verification: ${computeResult.verification_method.value}`);
 
-            // Match actual 0G Compute response structure
             return {
-              job_id: jobId,
+              jobId: jobId,
               provider: '0g-compute',
-              execution_hash: computeResult.execution_hash, // TEE execution ID
-              verification_method: computeResult.verification_method.value,
+              executionHash: computeResult.execution_hash, // TEE execution ID
+              verificationMethod: computeResult.verification_method.value as VerificationMethod,
               model: taskData.model,
-              attestation_data: attestationData, // Full attestation proof
+              attestationData: attestationData, // Full attestation proof
               proof: computeResult.proof?.toString('hex'),
               metadata: computeResult.metadata,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             };
           } else {
             console.warn(`⚠️  Compute result failed: ${computeResult.error}`);
@@ -285,28 +279,26 @@ export class ProcessIntegrity {
       result: this.serializeResult(result),
       start_time: startTime.toISOString(),
       execution_time: executionTime.toISOString(),
-      agent_name: this.agentName
+      agent_name: this.agentName,
     };
 
-    const executionHash = createHash('sha256')
-      .update(JSON.stringify(executionData))
-      .digest('hex');
+    const executionHash = createHash('sha256').update(JSON.stringify(executionData)).digest('hex');
 
-    // Build proof with optional TEE data
+    // Build proof with optional TEE data (camelCase to match types.ts)
     const proof: IntegrityProof = {
-      proof_id: proofId,
-      function_name: functionName,
-      code_hash: codeHash,
-      execution_hash: executionHash,
+      proofId: proofId,
+      functionName: functionName,
+      codeHash: codeHash,
+      executionHash: executionHash,
       timestamp: executionTime,
-      agent_name: this.agentName,
-      verification_status: 'verified',
-      ipfs_cid: undefined,
+      agentName: this.agentName,
+      verificationStatus: 'verified',
+      ipfsCid: undefined,
       // TEE fields (if available)
-      tee_attestation: teeAttestation || undefined,
-      tee_provider: teeAttestation?.provider,
-      tee_job_id: teeAttestation?.job_id,
-      tee_execution_hash: teeAttestation?.execution_hash
+      teeAttestation: teeAttestation || undefined,
+      teeProvider: teeAttestation?.provider,
+      teeJobId: teeAttestation?.jobId,
+      teeExecutionHash: teeAttestation?.executionHash,
     };
 
     const verificationLevel = teeAttestation ? 'local + TEE' : 'local';
@@ -322,35 +314,36 @@ export class ProcessIntegrity {
     if (!this.storageManager) return;
 
     try {
+      // JSON output uses snake_case for Python SDK compatibility
       const proofData = {
         type: 'chaoschain_process_integrity_proof_v2', // v2 includes TEE
         proof: {
-          proof_id: proof.proof_id,
-          function_name: proof.function_name,
-          code_hash: proof.code_hash,
-          execution_hash: proof.execution_hash,
+          proof_id: proof.proofId,
+          function_name: proof.functionName,
+          code_hash: proof.codeHash,
+          execution_hash: proof.executionHash,
           timestamp: proof.timestamp.toISOString(),
-          agent_name: proof.agent_name,
-          verification_status: proof.verification_status,
+          agent_name: proof.agentName,
+          verification_status: proof.verificationStatus,
           // TEE attestation (if available)
-          tee_attestation: proof.tee_attestation,
-          tee_provider: proof.tee_provider,
-          tee_job_id: proof.tee_job_id,
-          tee_execution_hash: proof.tee_execution_hash
+          tee_attestation: proof.teeAttestation,
+          tee_provider: proof.teeProvider,
+          tee_job_id: proof.teeJobId,
+          tee_execution_hash: proof.teeExecutionHash,
         },
         verification_layers: {
           local_code_hash: true,
-          tee_attestation: !!proof.tee_attestation
+          tee_attestation: !!proof.teeAttestation,
         },
         timestamp: new Date().toISOString(),
-        agent_name: this.agentName
+        agent_name: this.agentName,
       };
 
-      const filename = `process_integrity_proof_${proof.proof_id}.json`;
+      const filename = `process_integrity_proof_${proof.proofId}.json`;
       const cid = await this.storageManager.uploadJson(proofData, filename);
 
       if (cid) {
-        proof.ipfs_cid = cid;
+        proof.ipfsCid = cid;
         console.log(`📁 Process Integrity Proof stored on IPFS: ${cid}`);
       }
     } catch (e) {
@@ -389,7 +382,7 @@ export class ProcessIntegrity {
       coverage_amount: coverageAmount,
       conditions,
       created_at: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
     };
 
     console.log(`🛡️  Process insurance policy created: ${policyId}`);
@@ -415,7 +408,7 @@ export class ProcessIntegrity {
       constraints,
       integrity_verification: true,
       registered_functions: Array.from(this.registeredFunctions.keys()),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
 
     console.log(`🤖 Autonomous agent configured: ${configId}`);
@@ -429,8 +422,8 @@ export class ProcessIntegrity {
 /**
  * Decorator for automatically registering functions with integrity checking.
  */
-export function integrityCheckedFunction(verifier?: ProcessIntegrityVerifier) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+export function integrityCheckedFunction(verifier?: ProcessIntegrity) {
+  return function (_target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
@@ -453,4 +446,3 @@ export function integrityCheckedFunction(verifier?: ProcessIntegrityVerifier) {
     return descriptor;
   };
 }
-

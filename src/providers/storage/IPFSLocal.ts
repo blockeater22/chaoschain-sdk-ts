@@ -10,7 +10,10 @@ export class IPFSLocalStorage implements StorageProvider {
   private apiUrl: string;
   private gatewayUrl: string;
 
-  constructor(apiUrl: string = 'http://localhost:5001', gatewayUrl: string = 'http://localhost:8080') {
+  constructor(
+    apiUrl: string = 'http://localhost:5001',
+    gatewayUrl: string = 'http://localhost:8080'
+  ) {
     this.apiUrl = apiUrl;
     this.gatewayUrl = gatewayUrl;
   }
@@ -52,6 +55,7 @@ export class IPFSLocalStorage implements StorageProvider {
         cid,
         uri: `ipfs://${cid}`,
         size: response.data.Size,
+        timestamp: Date.now(),
       };
     } catch (error) {
       throw new Error(`Failed to upload to IPFS: ${(error as Error).message}`);
@@ -123,4 +127,3 @@ export class IPFSLocalStorage implements StorageProvider {
     }
   }
 }
-

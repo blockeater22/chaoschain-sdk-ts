@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'providers/storage/index': 'src/providers/storage/index.ts',
-    'providers/compute/index': 'src/providers/compute/index.ts'
+    'providers/compute/index': 'src/providers/compute/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: false,
@@ -13,6 +13,5 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   minify: false,
-  external: ['@pinata/sdk', '@irys/sdk', 'ipfs-http-client']
+  external: ['@pinata/sdk', '@irys/sdk', 'ipfs-http-client'],
 });
-

@@ -1,6 +1,6 @@
 /**
  * Facilitator Integration Test
- * 
+ *
  * Tests ChaosChain TypeScript SDK integration with local facilitator server
  * Running at: http://localhost:8402
  */
@@ -25,11 +25,11 @@ async function testFacilitatorIntegration() {
     // 1. Initialize SDK Components
     // ========================================================================
     console.log('📦 Step 1: Initializing SDK components...\n');
-    
+
     const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
     const walletManager = new WalletManager({ privateKey: TEST_PRIVATE_KEY }, provider);
     const wallet = walletManager.getWallet();
-    
+
     console.log(`✅ Wallet initialized`);
     console.log(`   Address: ${wallet.address}\n`);
 
@@ -37,24 +37,20 @@ async function testFacilitatorIntegration() {
     // 2. Initialize X402 Payment Manager with Facilitator
     // ========================================================================
     console.log('📦 Step 2: Initializing X402PaymentManager with local facilitator...\n');
-    
-    const paymentManager = new X402PaymentManager(
-      wallet,
-      NETWORK,
-      {
-        facilitatorUrl: FACILITATOR_URL,
-        mode: 'managed',
-        agentId: '8004#test-agent'
-      }
-    );
-    
+
+    const paymentManager = new X402PaymentManager(wallet, NETWORK, {
+      facilitatorUrl: FACILITATOR_URL,
+      mode: 'managed',
+      agentId: '8004#test-agent',
+    });
+
     console.log(''); // Line break after manager logs
 
     // ========================================================================
     // 3. Test Facilitator Health (if endpoint exists)
     // ========================================================================
     console.log('📦 Step 3: Testing facilitator connectivity...\n');
-    
+
     try {
       const healthResponse = await fetch(`${FACILITATOR_URL}/health`);
       if (healthResponse.ok) {
@@ -75,7 +71,7 @@ async function testFacilitatorIntegration() {
     // 4. Create Payment Request
     // ========================================================================
     console.log('📦 Step 4: Creating x402 payment request...\n');
-    
+
     const paymentRequest = paymentManager.createPaymentRequest(
       'TestAgent',
       'RecipientAgent',
@@ -83,7 +79,7 @@ async function testFacilitatorIntegration() {
       'USDC',
       'Test payment via facilitator'
     );
-    
+
     console.log('✅ Payment request created');
     console.log(`   Payment ID: ${paymentRequest.payment_id}`);
     console.log(`   Amount: ${paymentRequest.amount} ${paymentRequest.currency}`);
@@ -95,13 +91,13 @@ async function testFacilitatorIntegration() {
     // 5. Create Payment Requirements (x402 spec)
     // ========================================================================
     console.log('📦 Step 5: Creating payment requirements (x402 spec)...\n');
-    
+
     const paymentRequirements = paymentManager.createPaymentRequirements(
       10.0,
       'USDC',
       'Test service payment'
     );
-    
+
     console.log('✅ Payment requirements created');
     console.log(`   Scheme: ${paymentRequirements.scheme}`);
     console.log(`   Network: ${paymentRequirements.network}`);
@@ -114,39 +110,41 @@ async function testFacilitatorIntegration() {
     // 6. Generate EIP-3009 Signature
     // ========================================================================
     console.log('📦 Step 6: Generating EIP-3009 transfer authorization signature...\n');
-    
+
     const nonce = ethers.hexlify(ethers.randomBytes(32));
     const now = BigInt(Math.floor(Date.now() / 1000));
     const amount = ethers.parseUnits('10.0', 6); // 10 USDC
-    
+
     const authParams = {
       from: wallet.address,
       to: RECIPIENT_ADDRESS,
       value: amount,
       validAfter: now,
       validBefore: now + BigInt(3600),
-      nonce: nonce
+      nonce: nonce,
     };
-    
+
     const signature = await paymentManager.signTransferAuthorization(authParams);
-    
+
     console.log('✅ EIP-3009 signature generated');
-    console.log(`   Signature: ${signature.substring(0, 20)}...${signature.substring(signature.length - 10)}`);
+    console.log(
+      `   Signature: ${signature.substring(0, 20)}...${signature.substring(signature.length - 10)}`
+    );
     console.log(`   Length: ${signature.length} chars\n`);
 
     // ========================================================================
     // 7. Create Payment Header
     // ========================================================================
     console.log('📦 Step 7: Creating payment header for facilitator...\n');
-    
+
     const paymentHeader = {
       sender: wallet.address,
       nonce: nonce,
       validAfter: now.toString(),
       validBefore: (now + BigInt(3600)).toString(),
-      signature: signature
+      signature: signature,
     };
-    
+
     console.log('✅ Payment header created');
     console.log(`   Sender: ${paymentHeader.sender}`);
     console.log(`   Nonce: ${paymentHeader.nonce.substring(0, 20)}...`);
@@ -156,22 +154,22 @@ async function testFacilitatorIntegration() {
     // 8. Test Facilitator /verify Endpoint
     // ========================================================================
     console.log('📦 Step 8: Testing facilitator /verify endpoint...\n');
-    
+
     try {
       const verifyRequest = {
         x402Version: 1,
         paymentHeader: paymentHeader,
-        paymentRequirements: paymentRequirements
+        paymentRequirements: paymentRequirements,
       };
-      
+
       const verifyResponse = await fetch(`${FACILITATOR_URL}/verify`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(verifyRequest)
+        body: JSON.stringify(verifyRequest),
       });
-      
+
       if (verifyResponse.ok) {
         const verifyData = await verifyResponse.json();
         console.log('✅ Facilitator /verify succeeded');
@@ -191,29 +189,29 @@ async function testFacilitatorIntegration() {
     // 9. Test Facilitator /settle Endpoint
     // ========================================================================
     console.log('📦 Step 9: Testing facilitator /settle endpoint...\n');
-    
+
     try {
       const settleRequest = {
         x402Version: 1,
         paymentHeader: paymentHeader,
         paymentRequirements: paymentRequirements,
-        agentId: '8004#test-agent'
+        agentId: '8004#test-agent',
       };
-      
+
       const settleResponse = await fetch(`${FACILITATOR_URL}/settle`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': `test_${Date.now()}_${Math.random().toString(36).substring(2)}`
+          'Idempotency-Key': `test_${Date.now()}_${Math.random().toString(36).substring(2)}`,
         },
-        body: JSON.stringify(settleRequest)
+        body: JSON.stringify(settleRequest),
       });
-      
+
       if (settleResponse.ok) {
         const settleData = await settleResponse.json();
         console.log('✅ Facilitator /settle succeeded');
         console.log(`   Response: ${JSON.stringify(settleData, null, 2)}\n`);
-        
+
         if (settleData.txHash) {
           console.log('🎉 PAYMENT EXECUTED!');
           console.log(`   TX Hash: ${settleData.txHash}`);
@@ -230,7 +228,7 @@ async function testFacilitatorIntegration() {
         console.log(`⚠️  Facilitator /settle response`);
         console.log(`   Status: ${settleResponse.status}`);
         console.log(`   Response: ${errorText}\n`);
-        
+
         // This might be expected in simulation mode
         if (settleResponse.status === 200 || settleResponse.status === 201) {
           console.log('   (This might be expected behavior in simulation mode)');
@@ -245,14 +243,14 @@ async function testFacilitatorIntegration() {
     // 10. Test SDK's Built-in Facilitator Integration
     // ========================================================================
     console.log('📦 Step 10: Testing SDK built-in facilitator integration...\n');
-    
+
     try {
       // This will use the SDK's settleWithFacilitator method
       const settleResult = await paymentManager.settleWithFacilitator(
         paymentHeader,
         paymentRequirements
       );
-      
+
       console.log('✅ SDK facilitator integration works!');
       console.log(`   Success: ${settleResult.success}`);
       console.log(`   TX Hash: ${settleResult.txHash}`);
@@ -272,7 +270,7 @@ async function testFacilitatorIntegration() {
     console.log('╔════════════════════════════════════════════════════════════════╗');
     console.log('║  ✅ INTEGRATION TEST COMPLETE                                 ║');
     console.log('╚════════════════════════════════════════════════════════════════╝\n');
-    
+
     console.log('📊 Summary:');
     console.log('   ✅ SDK initialization');
     console.log('   ✅ Payment request creation');
@@ -280,9 +278,8 @@ async function testFacilitatorIntegration() {
     console.log('   ✅ EIP-3009 signature generation');
     console.log('   ✅ Payment header creation');
     console.log('   ✅ Facilitator API calls\n');
-    
+
     console.log('🎉 Your SDK is fully integrated with the facilitator!\n');
-    
   } catch (error: any) {
     console.log('\n❌ TEST FAILED\n');
     console.log(`Error: ${error.message}`);
@@ -293,4 +290,3 @@ async function testFacilitatorIntegration() {
 
 // Run the test
 testFacilitatorIntegration().catch(console.error);
-

@@ -34,22 +34,15 @@ app.use(express.json());
 
 // 1. Initialize wallet
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || 'https://sepolia.base.org');
-const walletManager = new WalletManager(
-  { privateKey: process.env.MERCHANT_PRIVATE_KEY },
-  provider
-);
+const walletManager = new WalletManager({ privateKey: process.env.MERCHANT_PRIVATE_KEY }, provider);
 
 // 2. Initialize X402 Payment Manager with YOUR facilitator
-const paymentManager = new X402PaymentManager(
-  walletManager.getWallet(),
-  'base-sepolia',
-  {
-    facilitatorUrl: process.env.FACILITATOR_URL || 'https://facilitator.chaoscha.in',
-    apiKey: process.env.CC_API_KEY, // Optional: for premium features
-    mode: 'managed',
-    agentId: process.env.AGENT_ID // Optional: for Proof-of-Agency tracking
-  }
-);
+const paymentManager = new X402PaymentManager(walletManager.getWallet(), 'base-sepolia', {
+  facilitatorUrl: process.env.FACILITATOR_URL || 'https://facilitator.chaoscha.in',
+  apiKey: process.env.CC_API_KEY, // Optional: for premium features
+  mode: 'managed',
+  agentId: process.env.AGENT_ID, // Optional: for Proof-of-Agency tracking
+});
 
 // 3. Protected endpoint
 app.get('/api/service', async (req, res) => {
@@ -58,7 +51,7 @@ app.get('/api/service', async (req, res) => {
   if (!xPaymentHeader) {
     // No payment - return 402 with payment requirements
     const requirements = paymentManager.createPaymentRequirements(
-      1.00, // 1 USDC
+      1.0, // 1 USDC
       'USDC',
       'AI Analysis Service',
       '/api/service'
@@ -66,20 +59,20 @@ app.get('/api/service', async (req, res) => {
 
     return res.status(402).json({
       x402Version: 1,
-      accepts: [{
-        scheme: requirements.scheme,
-        network: requirements.network,
-        asset: requirements.asset
-      }],
-      paymentRequirements: requirements
+      accepts: [
+        {
+          scheme: requirements.scheme,
+          network: requirements.network,
+          asset: requirements.asset,
+        },
+      ],
+      paymentRequirements: requirements,
     });
   }
 
   // Verify payment with facilitator
   try {
-    const paymentHeader = JSON.parse(
-      Buffer.from(xPaymentHeader, 'base64').toString('utf-8')
-    );
+    const paymentHeader = JSON.parse(Buffer.from(xPaymentHeader, 'base64').toString('utf-8'));
 
     // Call facilitator to verify
     const verifyResponse = await fetch(`${process.env.FACILITATOR_URL}/verify`, {
@@ -89,12 +82,12 @@ app.get('/api/service', async (req, res) => {
         x402Version: 1,
         paymentHeader,
         paymentRequirements: paymentManager.createPaymentRequirements(
-          1.00,
+          1.0,
           'USDC',
           'AI Analysis Service',
           '/api/service'
-        )
-      })
+        ),
+      }),
     });
 
     const verifyData = await verifyResponse.json();
@@ -106,9 +99,10 @@ app.get('/api/service', async (req, res) => {
     // Payment verified! Return the service
     res.json({
       result: 'AI analysis complete',
-      data: { /* your service response */ }
+      data: {
+        /* your service response */
+      },
     });
-
   } catch (error) {
     res.status(500).json({ error: 'Payment verification failed' });
   }
@@ -138,41 +132,43 @@ async function main() {
   );
 
   // 2. Initialize X402 Payment Manager
-  const paymentManager = new X402PaymentManager(
-    walletManager.getWallet(),
-    'base-sepolia',
-    {
-      facilitatorUrl: 'http://localhost:8402', // Your facilitator!
-      mode: 'managed'
-    }
-  );
+  const paymentManager = new X402PaymentManager(walletManager.getWallet(), 'base-sepolia', {
+    facilitatorUrl: 'http://localhost:8402', // Your facilitator!
+    mode: 'managed',
+  });
 
   // 3. Create X402 Server
   const server = new X402Server(paymentManager, {
     port: 3000,
     host: '0.0.0.0',
-    defaultCurrency: 'USDC'
+    defaultCurrency: 'USDC',
   });
 
   // 4. Register protected endpoints
-  server.requirePayment(1.00, 'AI Analysis Service', 'USDC')(
-    async function aiAnalysis(data: any) {
-      // Your service logic here
-      return {
-        result: 'Analysis complete',
-        data: { /* your analysis results */ }
-      };
-    }
-  );
+  server.requirePayment(
+    1.0,
+    'AI Analysis Service',
+    'USDC'
+  )(async function aiAnalysis(data: any) {
+    // Your service logic here
+    return {
+      result: 'Analysis complete',
+      data: {
+        /* your analysis results */
+      },
+    };
+  });
 
-  server.requirePayment(0.50, 'Image Generation', 'USDC')(
-    async function imageGeneration(data: any) {
-      return {
-        result: 'Image generated',
-        imageUrl: 'https://example.com/image.png'
-      };
-    }
-  );
+  server.requirePayment(
+    0.5,
+    'Image Generation',
+    'USDC'
+  )(async function imageGeneration(data: any) {
+    return {
+      result: 'Image generated',
+      imageUrl: 'https://example.com/image.png',
+    };
+  });
 
   // 5. Start server
   server.start();
@@ -186,6 +182,7 @@ main().catch(console.error);
 ```
 
 **Benefits:**
+
 - ✅ Automatic HTTP 402 responses
 - ✅ Built-in payment verification
 - ✅ Facilitator integration
@@ -208,19 +205,12 @@ app.use(express.json());
 
 // Initialize
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
-const walletManager = new WalletManager(
-  { privateKey: process.env.MERCHANT_PRIVATE_KEY },
-  provider
-);
+const walletManager = new WalletManager({ privateKey: process.env.MERCHANT_PRIVATE_KEY }, provider);
 
-const paymentManager = new X402PaymentManager(
-  walletManager.getWallet(),
-  'base-sepolia',
-  {
-    facilitatorUrl: 'http://localhost:8402',
-    mode: 'managed'
-  }
-);
+const paymentManager = new X402PaymentManager(walletManager.getWallet(), 'base-sepolia', {
+  facilitatorUrl: 'http://localhost:8402',
+  mode: 'managed',
+});
 
 // Middleware: Check for payment
 async function requirePayment(amount: number, description: string) {
@@ -236,24 +226,25 @@ async function requirePayment(amount: number, description: string) {
         req.path
       );
 
-      return res.status(402)
+      return res
+        .status(402)
         .header('X-PAYMENT', '') // Indicate x402 support
         .json({
           x402Version: 1,
-          accepts: [{
-            scheme: requirements.scheme,
-            network: requirements.network,
-            asset: requirements.asset
-          }],
-          paymentRequirements: requirements
+          accepts: [
+            {
+              scheme: requirements.scheme,
+              network: requirements.network,
+              asset: requirements.asset,
+            },
+          ],
+          paymentRequirements: requirements,
         });
     }
 
     // Verify payment
     try {
-      const paymentHeader = JSON.parse(
-        Buffer.from(xPaymentHeader, 'base64').toString('utf-8')
-      );
+      const paymentHeader = JSON.parse(Buffer.from(xPaymentHeader, 'base64').toString('utf-8'));
 
       const requirements = paymentManager.createPaymentRequirements(
         amount,
@@ -269,8 +260,8 @@ async function requirePayment(amount: number, description: string) {
         body: JSON.stringify({
           x402Version: 1,
           paymentHeader,
-          paymentRequirements: requirements
-        })
+          paymentRequirements: requirements,
+        }),
       });
 
       const verifyData = await verifyResponse.json();
@@ -282,7 +273,6 @@ async function requirePayment(amount: number, description: string) {
       // Store payment info for this request
       req.payment = verifyData;
       next();
-
     } catch (error: any) {
       res.status(500).json({ error: 'Payment verification failed', message: error.message });
     }
@@ -290,18 +280,18 @@ async function requirePayment(amount: number, description: string) {
 }
 
 // Use the middleware
-app.get('/api/analyze', requirePayment(1.00, 'AI Analysis'), async (req, res) => {
+app.get('/api/analyze', requirePayment(1.0, 'AI Analysis'), async (req, res) => {
   // Payment verified - provide service
   res.json({
     result: 'Analysis complete',
-    payment: req.payment // Payment details from facilitator
+    payment: req.payment, // Payment details from facilitator
   });
 });
 
-app.get('/api/generate-image', requirePayment(0.50, 'Image Generation'), async (req, res) => {
+app.get('/api/generate-image', requirePayment(0.5, 'Image Generation'), async (req, res) => {
   res.json({
     result: 'Image generated',
-    imageUrl: 'https://example.com/image.png'
+    imageUrl: 'https://example.com/image.png',
   });
 });
 
@@ -334,14 +324,17 @@ curl http://localhost:3000/api/service
 ```
 
 **Expected Response:**
+
 ```json
 {
   "x402Version": 1,
-  "accepts": [{
-    "scheme": "exact",
-    "network": "base-sepolia",
-    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-  }],
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "base-sepolia",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+    }
+  ],
   "paymentRequirements": {
     "scheme": "exact",
     "network": "base-sepolia",
@@ -369,14 +362,10 @@ import { ethers } from 'ethers';
 const provider = new ethers.JsonRpcProvider('https://sepolia.base.org');
 const clientWallet = new WalletManager({ privateKey: process.env.CLIENT_PRIVATE_KEY }, provider);
 
-const clientPaymentManager = new X402PaymentManager(
-  clientWallet.getWallet(),
-  'base-sepolia',
-  {
-    facilitatorUrl: 'http://localhost:8402',
-    mode: 'managed'
-  }
-);
+const clientPaymentManager = new X402PaymentManager(clientWallet.getWallet(), 'base-sepolia', {
+  facilitatorUrl: 'http://localhost:8402',
+  mode: 'managed',
+});
 
 // 1. Get payment requirements from merchant
 const response402 = await fetch('http://localhost:3000/api/service');
@@ -392,7 +381,7 @@ const authParams = {
   value: BigInt(paymentRequirements.maxAmountRequired),
   validAfter: now,
   validBefore: now + BigInt(3600),
-  nonce
+  nonce,
 };
 
 const signature = await clientPaymentManager.signTransferAuthorization(authParams);
@@ -403,14 +392,14 @@ const paymentHeader = {
   nonce,
   validAfter: now.toString(),
   validBefore: (now + BigInt(3600)).toString(),
-  signature
+  signature,
 };
 
 // 4. Make request with payment
 const paidResponse = await fetch('http://localhost:3000/api/service', {
   headers: {
-    'X-PAYMENT': Buffer.from(JSON.stringify(paymentHeader)).toString('base64')
-  }
+    'X-PAYMENT': Buffer.from(JSON.stringify(paymentHeader)).toString('base64'),
+  },
 });
 
 const result = await paidResponse.json();
@@ -455,15 +444,17 @@ HOST=0.0.0.0
 ### Security Best Practices
 
 1. **Never expose private keys**
+
    ```typescript
    // ❌ Bad
    const privateKey = '0x123...';
-   
+
    // ✅ Good
    const privateKey = process.env.MERCHANT_PRIVATE_KEY;
    ```
 
 2. **Validate payment amounts**
+
    ```typescript
    if (verifyData.amount.base !== expectedAmount) {
      return res.status(402).json({ error: 'Incorrect payment amount' });
@@ -471,13 +462,14 @@ HOST=0.0.0.0
    ```
 
 3. **Implement idempotency**
+
    ```typescript
    const paymentCache = new Map();
-   
+
    if (paymentCache.has(paymentHeader.nonce)) {
      return res.json({ error: 'Payment already processed' });
    }
-   
+
    paymentCache.set(paymentHeader.nonce, verifyData);
    ```
 
@@ -494,6 +486,7 @@ HOST=0.0.0.0
 Creates x402 payment requirements for your endpoint.
 
 **Parameters:**
+
 - `amount` (number): Payment amount (e.g., 1.00 for 1 USDC)
 - `currency` (string): 'USDC' or 'ETH'
 - `description` (string): Human-readable service description
@@ -502,9 +495,10 @@ Creates x402 payment requirements for your endpoint.
 **Returns:** `X402PaymentRequirements` object
 
 **Example:**
+
 ```typescript
 const requirements = paymentManager.createPaymentRequirements(
-  1.00,
+  1.0,
   'USDC',
   'AI Analysis Service',
   '/api/analyze'
@@ -525,4 +519,3 @@ const requirements = paymentManager.createPaymentRequirements(
 ## 📄 License
 
 MIT © ChaosChain Labs
-

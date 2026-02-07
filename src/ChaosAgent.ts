@@ -4,41 +4,27 @@
  */
 
 import { ethers } from 'ethers';
-import {
-  AgentMetadata,
-  AgentRegistration,
-  FeedbackParams,
-  FeedbackRecord,
-  ValidationRequestParams,
-  ValidationRequest,
-  ValidationStatus,
-  ContractAddresses,
-} from './types';
+import { AgentMetadata, AgentRegistration, FeedbackParams, ContractAddresses } from './types';
 import {
   IDENTITY_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
   VALIDATION_REGISTRY_ABI,
 } from './utils/contracts';
+import path from 'path';
+import fs from 'fs';
 
 export class ChaosAgent {
   private identityContract: ethers.Contract;
   private reputationContract: ethers.Contract;
   private validationContract: ethers.Contract;
   private signer: ethers.Signer;
+  private _agentId: bigint | null = null;
 
-  constructor(
-    addresses: ContractAddresses,
-    signer: ethers.Signer,
-    _provider: ethers.Provider
-  ) {
+  constructor(addresses: ContractAddresses, signer: ethers.Signer, _provider: ethers.Provider) {
     this.signer = signer;
 
     // Initialize contract instances
-    this.identityContract = new ethers.Contract(
-      addresses.identity,
-      IDENTITY_REGISTRY_ABI,
-      signer
-    );
+    this.identityContract = new ethers.Contract(addresses.identity, IDENTITY_REGISTRY_ABI, signer);
     this.reputationContract = new ethers.Contract(
       addresses.reputation,
       REPUTATION_REGISTRY_ABI,
@@ -91,6 +77,9 @@ export class ChaosAgent {
       throw new Error('Registered event not found');
     }
 
+    // Set agent ID in memory and cache
+    await this.setCachedAgentId(event.args.agentId);
+
     return {
       agentId: event.args.agentId,
       txHash: receipt.hash,
@@ -104,7 +93,7 @@ export class ChaosAgent {
   async getAgentMetadata(agentId: bigint): Promise<AgentMetadata | null> {
     try {
       const uri = await this.identityContract.tokenURI(agentId);
-      
+
       if (!uri) {
         return null;
       }
@@ -119,13 +108,13 @@ export class ChaosAgent {
       if (uri.startsWith('ipfs://')) {
         const cid = uri.substring(7);
         const response = await fetch(`https://ipfs.io/ipfs/${cid}`);
-        return response.json();
+        return response.json() as Promise<AgentMetadata>;
       }
 
       // Parse https:// URI
       if (uri.startsWith('https://') || uri.startsWith('http://')) {
         const response = await fetch(uri);
-        return response.json();
+        return response.json() as Promise<AgentMetadata>;
       }
 
       return null;
@@ -174,6 +163,94 @@ export class ChaosAgent {
   }
 
   /**
+   * Get the agent's on-chain ID (ERC-8004) with optional local caching.
+   *
+   * @param useCache - If true, check local cache first (default: true)
+   * @returns Agent ID if registered, null otherwise
+   */
+  async getAgentId(useCache: boolean = true): Promise<bigint | null> {
+    // 1. Check memory first
+    if (this._agentId !== null) return this._agentId;
+
+    // 2. Check chain info for cache lookup
+    const network = await this.signer.provider!.getNetwork();
+    const chainId = Number(network.chainId);
+    const walletAddress = await this.signer.getAddress();
+
+    // 3. Check cache if enabled
+    if (useCache) {
+      const cachedId = this.loadAgentIdFromCache(chainId, walletAddress);
+      if (cachedId !== null) {
+        this._agentId = cachedId;
+        console.log('Agent ID loaded from cache:', cachedId);
+        return cachedId;
+      }
+    }
+
+    // 4. Query on-chain
+    try {
+      const balance: bigint = await this.identityContract.balanceOf(walletAddress);
+      if (balance === 0n) {
+        return null; // No agents owned
+      }
+
+      // 5. Try ERC-721 Enumerable first
+      try {
+        const agentId: bigint = await this.identityContract.tokenOfOwnerByIndex(walletAddress, 0);
+        this._agentId = agentId;
+        this.saveAgentIdTocache(chainId, walletAddress, agentId);
+        return this._agentId;
+      } catch (error) {
+        // tokenOfOwnerByIndex not available, use fallback
+      }
+
+      // 6. Fallback: iterate through recent tokens
+      try {
+        const totalSupply: bigint = await this.identityContract.totalSupply();
+        const total = Number(totalSupply);
+        for (let i = total; i > Math.max(0, total - 100); i--) {
+          try {
+            const owner = await this.identityContract.ownerOf(BigInt(i));
+            if (owner.toLowerCase() === walletAddress.toLowerCase()) {
+              this._agentId = BigInt(i);
+              this.saveAgentIdTocache(chainId, walletAddress, this._agentId);
+              return this._agentId;
+            }
+          } catch {
+            continue; // token might not exist
+          }
+        }
+      } catch {
+        // totalSupply not available
+      }
+    } catch (error) {
+      console.error('Failed to get agent ID:', error);
+    }
+
+    return null;
+  }
+
+  /**
+   * Manually set the agent ID (useful when known from external source).
+   * Sets both in-memory state AND saves to cache.
+   *
+   * @param agentId - The ERC-8004 agent ID to cache
+   */
+  async setCachedAgentId(agentId: bigint): Promise<void> {
+    // Get chain info
+    const network = await this.signer.provider!.getNetwork();
+    const chainId = Number(network.chainId);
+    const walletAddress = await this.signer.getAddress();
+
+    // set in memory
+    this._agentId = agentId;
+
+    // Save to cache
+    this.saveAgentIdTocache(chainId, walletAddress, agentId);
+    console.log('Agent ID set and cached:', agentId);
+  }
+
+  /**
    * Transfer agent ownership
    */
   async transferAgent(agentId: bigint, to: string): Promise<string> {
@@ -189,10 +266,10 @@ export class ChaosAgent {
 
   /**
    * Generate EIP-191 signed feedback authorization (ERC-8004 v1.0)
-   * 
+   *
    * This signature allows a client to submit feedback to an agent's reputation.
    * The agent owner signs to authorize the client to give feedback up to a certain index.
-   * 
+   *
    * @param agentId Target agent ID receiving feedback
    * @param clientAddress Address of the client giving feedback
    * @param indexLimit Maximum feedback index this authorization permits
@@ -235,7 +312,7 @@ export class ChaosAgent {
         ethers.toBeHex(expiry, 32),
         ethers.toBeHex(chainId, 32),
         ethers.zeroPadValue(identityAddress, 32),
-        ethers.zeroPadValue(signerAddress, 32)
+        ethers.zeroPadValue(signerAddress, 32),
       ]);
 
       // Return struct + signature
@@ -268,7 +345,10 @@ export class ChaosAgent {
     const tag2 = feedbackData?.tag2 || ethers.ZeroHash; // bytes32
 
     // Calculate feedback hash
-    const feedbackContent = feedbackData?.content || feedbackUri;
+    const feedbackContent =
+      typeof feedbackData?.content === 'string' // we could add a type guard here instead of using typeof
+        ? feedbackData.content
+        : feedbackUri;
     const feedbackHash = ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
 
     // Feedback auth (289 bytes: struct + signature)
@@ -572,6 +652,38 @@ export class ChaosAgent {
   }
 
   // ============================================================================
+  // Cache Implementation
+  // ============================================================================
+  private getCachedFilePath(): string {
+    return path.join(process.cwd(), 'chaoschain_agent_ids.json');
+  }
+
+  private loadAgentIdFromCache(chainId: number, wallet: string): bigint | null {
+    const cacheFile = this.getCachedFilePath();
+    if (!fs.existsSync(cacheFile)) return null;
+    const cacheData = fs.readFileSync(cacheFile, 'utf-8');
+    const cache = JSON.parse(cacheData);
+    return cache[chainId]?.[wallet]?.agentId || null;
+  }
+
+  private saveAgentIdTocache(
+    chainId: number,
+    wallet: string,
+    agentId: bigint,
+    domain?: string
+  ): void {
+    const cacheFile = this.getCachedFilePath();
+    const cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) : {};
+    cache[String(chainId)] = cache[String(chainId)] ?? {};
+    cache[String(chainId)][wallet.toLowerCase()] = {
+      agentId,
+      timestamp: new Date().toISOString(),
+      domain,
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
+  }
+
+  // ============================================================================
   // Event Listening
   // ============================================================================
 
@@ -619,7 +731,12 @@ export class ChaosAgent {
    * Listen for ValidationRequest events (ERC-8004 v1.0)
    */
   onValidationRequest(
-    callback: (validatorAddress: string, agentId: bigint, requestUri: string, requestHash: string) => void
+    callback: (
+      validatorAddress: string,
+      agentId: bigint,
+      requestUri: string,
+      requestHash: string
+    ) => void
   ): void {
     this.validationContract.on('ValidationRequest', callback);
   }
@@ -650,4 +767,3 @@ export class ChaosAgent {
     this.validationContract.removeAllListeners();
   }
 }
-
