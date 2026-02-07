@@ -8,16 +8,31 @@ import { NetworkConfig, NetworkInfo, ContractAddresses } from '../types';
  * ERC-8004 v1.0 contract addresses (pre-deployed)
  */
 export const ERC8004_ADDRESSES: Record<string, ContractAddresses> = {
+  'ethereum-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
   // Official ERC-8004 Registries (Feb 2026 spec)
   'ethereum-sepolia': {
     identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
     reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
     validation: '0x8004CB39f29c09145F24Ad9dDe2A108C1A2cdfC5',
   },
+  'optimism-sepolia': {
+    identity: '0x0000000000000000000000000000000000000000',
+    reputation: '0x0000000000000000000000000000000000000000',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
   'base-sepolia': {
     identity: '0x8004AA63c570c570eBF15376c0dB199918BFe9Fb',
     reputation: '0x8004bd8daB57f14Ed299135749a5CB5c42d341BF',
     validation: '0x8004C269D0A5647E51E121FeB226200ECE932d55',
+  },
+  'mode-testnet': {
+    identity: '0x0000000000000000000000000000000000000000',
+    reputation: '0x0000000000000000000000000000000000000000',
+    validation: '0x0000000000000000000000000000000000000000',
   },
   'linea-sepolia': {
     identity: '0x8004aa7C931bCE1233973a0C6A667f73F66282e7',
@@ -45,6 +60,17 @@ export const ERC8004_ADDRESSES: Record<string, ContractAddresses> = {
  * Network information and RPC endpoints
  */
 export const NETWORK_INFO: Record<string, NetworkInfo> = {
+  'ethereum-mainnet': {
+    chainId: 1,
+    name: 'Ethereum Mainnet',
+    rpcUrl: process.env.ETH_MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+    contracts: ERC8004_ADDRESSES['ethereum-mainnet'],
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
   'ethereum-sepolia': {
     chainId: 11155111,
     name: 'Ethereum Sepolia Testnet',
@@ -56,11 +82,33 @@ export const NETWORK_INFO: Record<string, NetworkInfo> = {
       decimals: 18,
     },
   },
+  'optimism-sepolia': {
+    chainId: 11155420,
+    name: 'Optimism Sepolia Testnet',
+    rpcUrl: process.env.OPTIMISM_SEPOLIA_RPC_URL || 'https://sepolia.optimism.io',
+    contracts: ERC8004_ADDRESSES['optimism-sepolia'],
+    nativeCurrency: {
+      name: 'Sepolia ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
   'base-sepolia': {
     chainId: 84532,
     name: 'Base Sepolia Testnet',
     rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
     contracts: ERC8004_ADDRESSES['base-sepolia'],
+    nativeCurrency: {
+      name: 'Sepolia ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'mode-testnet': {
+    chainId: 919,
+    name: 'Mode Sepolia Testnet',
+    rpcUrl: process.env.MODE_TESTNET_RPC_URL || 'https://sepolia.mode.network',
+    contracts: ERC8004_ADDRESSES['mode-testnet'],
     nativeCurrency: {
       name: 'Sepolia ETH',
       symbol: 'ETH',

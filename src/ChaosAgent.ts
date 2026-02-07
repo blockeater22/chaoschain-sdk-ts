@@ -283,6 +283,9 @@ export class ChaosAgent {
     expiry: bigint
   ): Promise<string> {
     try {
+      console.warn(
+        'generateFeedbackAuthorization is DEPRECATED. ERC-8004 Jan 2026 removed feedbackAuth.'
+      );
       // Get chain ID
       const network = await this.signer.provider!.getNetwork();
       const chainId = network.chainId;
@@ -326,9 +329,9 @@ export class ChaosAgent {
   }
 
   /**
-   * Give feedback to an agent (ERC-8004 v1.0)
+   * Give feedback to an agent (ERC-8004 Jan/Feb 2026)
    *
-   * @param params Feedback parameters including agentId, rating, feedbackUri, and optional auth
+   * @param params Feedback parameters including agentId, rating, feedbackUri, and optional metadata
    * @returns Transaction hash
    */
   async giveFeedback(params: FeedbackParams): Promise<string> {
@@ -339,30 +342,41 @@ export class ChaosAgent {
       throw new Error('Rating must be between 0 and 100');
     }
 
-    // ERC-8004 v1.0 requires: (agentId, score, tag1, tag2, feedbackUri, feedbackHash, feedbackAuth)
-    const score = rating; // 0-100
-    const tag1 = feedbackData?.tag1 || ethers.ZeroHash; // bytes32
-    const tag2 = feedbackData?.tag2 || ethers.ZeroHash; // bytes32
+    // ERC-8004 Feb 2026 requires:
+    // (agentId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash)
+    const tag1 = typeof feedbackData?.tag1 === 'string' ? feedbackData.tag1 : '';
+    const tag2 = typeof feedbackData?.tag2 === 'string' ? feedbackData.tag2 : '';
+    const endpoint = typeof feedbackData?.endpoint === 'string' ? feedbackData.endpoint : '';
+    const valueDecimals =
+      typeof feedbackData?.valueDecimals === 'number' ? feedbackData.valueDecimals : 0;
+    const rawValue =
+      typeof feedbackData?.value === 'bigint' || typeof feedbackData?.value === 'number'
+        ? feedbackData.value
+        : rating;
+    const value =
+      typeof rawValue === 'bigint'
+        ? rawValue
+        : BigInt(Math.round(rawValue * Math.pow(10, valueDecimals)));
 
     // Calculate feedback hash
     const feedbackContent =
-      typeof feedbackData?.content === 'string' // we could add a type guard here instead of using typeof
-        ? feedbackData.content
-        : feedbackUri;
-    const feedbackHash = ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
-
-    // Feedback auth (289 bytes: struct + signature)
-    // If not provided, use empty bytes (will work if no auth required or for self-feedback)
-    const feedbackAuth = feedbackData?.feedbackAuth || '0x';
+      typeof feedbackData?.content === 'string' ? feedbackData.content : feedbackUri;
+    const feedbackHash =
+      typeof feedbackData?.feedbackHash === 'string'
+        ? feedbackData.feedbackHash.startsWith('0x')
+          ? feedbackData.feedbackHash
+          : ethers.id(feedbackData.feedbackHash)
+        : ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
 
     const tx = await this.reputationContract.giveFeedback(
       agentId,
-      score,
+      value,
+      valueDecimals,
       tag1,
       tag2,
+      endpoint,
       feedbackUri,
-      feedbackHash,
-      feedbackAuth
+      feedbackHash
     );
     const receipt = await tx.wait();
 
@@ -418,13 +432,19 @@ export class ChaosAgent {
     index: bigint
   ): Promise<{
     score: number;
+    value: bigint;
+    valueDecimals: number;
     tag1: string;
     tag2: string;
     isRevoked: boolean;
   }> {
     const feedback = await this.reputationContract.readFeedback(agentId, clientAddress, index);
+    const valueDecimals = Number(feedback.valueDecimals ?? 0);
+    const value = (feedback.value ?? feedback.score) as bigint;
     return {
-      score: Number(feedback.score),
+      score: Number(value) / Math.pow(10, valueDecimals),
+      value,
+      valueDecimals,
       tag1: feedback.tag1,
       tag2: feedback.tag2,
       isRevoked: feedback.isRevoked,
@@ -442,12 +462,14 @@ export class ChaosAgent {
   async readAllFeedback(
     agentId: bigint,
     clientAddresses: string[] = [],
-    tag1: string = ethers.ZeroHash,
-    tag2: string = ethers.ZeroHash,
+    tag1: string = '',
+    tag2: string = '',
     includeRevoked: boolean = false
   ): Promise<{
     clients: string[];
+    feedbackIndexes: bigint[];
     scores: number[];
+    valueDecimals: number[];
     tag1s: string[];
     tag2s: string[];
     revokedStatuses: boolean[];
@@ -459,9 +481,16 @@ export class ChaosAgent {
       tag2,
       includeRevoked
     );
+    const valueDecimals = (result.valueDecimals || []).map((v: bigint) => Number(v));
+    const values = (result.values || result.scores) as bigint[];
     return {
       clients: result.clients,
-      scores: result.scores.map((s: bigint) => Number(s)),
+      feedbackIndexes: result.feedbackIndexes || [],
+      scores: values.map((value: bigint, i: number) => {
+        const decimals = valueDecimals[i] || 0;
+        return Number(value) / Math.pow(10, decimals);
+      }),
+      valueDecimals,
       tag1s: result.tag1s,
       tag2s: result.tag2s,
       revokedStatuses: result.revokedStatuses,
@@ -478,16 +507,20 @@ export class ChaosAgent {
   async getSummary(
     agentId: bigint,
     clientAddresses: string[] = [],
-    tag1: string = ethers.ZeroHash,
-    tag2: string = ethers.ZeroHash
+    tag1: string = '',
+    tag2: string = ''
   ): Promise<{
     count: bigint;
     averageScore: number;
+    averageScoreDecimals: number;
   }> {
     const result = await this.reputationContract.getSummary(agentId, clientAddresses, tag1, tag2);
+    const averageScoreDecimals = Number(result.summaryValueDecimals ?? 0);
+    const summaryValue = (result.summaryValue ?? result.averageScore) as bigint;
     return {
       count: result.count,
-      averageScore: Number(result.averageScore),
+      averageScore: Number(summaryValue) / Math.pow(10, averageScoreDecimals),
+      averageScoreDecimals,
     };
   }
 

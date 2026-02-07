@@ -403,12 +403,14 @@ export class GatewayClient {
     scores: number[],
     signerAddress: string,
     options?: {
+      workerAddress?: string;
       workAddress?: string;
       salt?: string;
       mode?: ScoreSubmissionMode;
       onProgress?: (status: WorkflowStatus) => void;
     }
   ): Promise<WorkflowStatus> {
+    const workerAddress = options?.workerAddress ?? options?.workAddress;
     const workflow = await this.submitScore(
       studioAddress,
       epoch,
@@ -416,7 +418,11 @@ export class GatewayClient {
       dataHash,
       scores,
       signerAddress,
-      options
+      {
+        workerAddress,
+        salt: options?.salt,
+        mode: options?.mode,
+      }
     );
 
     return this.waitForCompletion(workflow.workflowId, { onProgress: options?.onProgress });

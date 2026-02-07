@@ -589,6 +589,7 @@ export const ERC20_ABI = [
  * USDC token addresses by network
  */
 export const USDC_ADDRESSES: Record<string, string> = {
+  [NetworkConfig.ETHEREUM_MAINNET]: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
   [NetworkConfig.ETHEREUM_SEPOLIA]: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
   [NetworkConfig.BASE_SEPOLIA]: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   [NetworkConfig.OPTIMISM_SEPOLIA]: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7',
@@ -596,6 +597,7 @@ export const USDC_ADDRESSES: Record<string, string> = {
   [NetworkConfig.HEDERA_TESTNET]: '0x0000000000000000000000000000000000000000', // TODO: Add Hedera Testnet USDC address
   [NetworkConfig.ZEROG_TESTNET]: '0x0000000000000000000000000000000000000000', // TODO: Add Zerog Testnet USDC address
   [NetworkConfig.BSC_TESTNET]: '0x0000000000000000000000000000000000000000', // TODO: Add BSC Testnet USDC address
+  [NetworkConfig.MODE_TESTNET]: '0x0000000000000000000000000000000000000000', // TODO: Add Mode Testnet USDC address
   [NetworkConfig.LOCAL]: '0x0000000000000000000000000000000000000000',
 };
 
@@ -610,6 +612,16 @@ export function getUSDCAddress(network: string): string {
  * ERC-8004 v1.0 Contract Addresses by Network
  */
 export const CONTRACT_ADDRESSES = {
+  [NetworkConfig.ETHEREUM_MAINNET]: {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    treasury: null,
+    chaos_core: null,
+    rewards_distributor: null,
+    studio_factory: null,
+  },
   [NetworkConfig.ETHEREUM_SEPOLIA]: {
     // Official ERC-8004 Registries (Feb 2026 spec - https://github.com/erc-8004/erc-8004-contracts)
     identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
@@ -632,6 +644,13 @@ export const CONTRACT_ADDRESSES = {
     reputation_registry: '0x0000000000000000000000000000000000000000',
     validation_registry: '0x0000000000000000000000000000000000000000',
     usdc_token: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7',
+    treasury: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70',
+  },
+  [NetworkConfig.MODE_TESTNET]: {
+    identity: '0x0000000000000000000000000000000000000000',
+    reputation: '0x0000000000000000000000000000000000000000',
+    validation: '0x0000000000000000000000000000000000000000',
+    usdc: '0x0000000000000000000000000000000000000000',
     treasury: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70',
   },
   [NetworkConfig.BASE_SEPOLIA]: {

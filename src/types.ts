@@ -13,6 +13,7 @@ import { ethers } from 'ethers';
  * Supported blockchain networks with pre-deployed ERC-8004 contracts
  */
 export enum NetworkConfig {
+  ETHEREUM_MAINNET = 'ethereum-mainnet',
   ETHEREUM_SEPOLIA = 'ethereum-sepolia',
   BASE_SEPOLIA = 'base-sepolia',
   OPTIMISM_SEPOLIA = 'optimism-sepolia',
@@ -130,7 +131,24 @@ export interface FeedbackParams {
   agentId: bigint;
   rating: number;
   feedbackUri: string;
-  feedbackData?: Record<string, unknown>;
+  feedbackData?: FeedbackData;
+}
+
+/**
+ * Feedback metadata payload (ERC-8004 Jan/Feb 2026)
+ */
+export interface FeedbackData extends Record<string, unknown> {
+  tag1?: string;
+  tag2?: string;
+  endpoint?: string;
+  value?: number | bigint;
+  valueDecimals?: number;
+  content?: string;
+  feedbackHash?: string;
+  /**
+   * @deprecated ERC-8004 Jan 2026 removed feedbackAuth
+   */
+  feedbackAuth?: string;
 }
 
 /**
@@ -141,6 +159,12 @@ export interface FeedbackRecord {
   fromAgent: bigint;
   toAgent: bigint;
   rating: number;
+  value?: number;
+  valueDecimals?: number;
+  tag1?: string;
+  tag2?: string;
+  endpoint?: string;
+  feedbackIndex?: bigint;
   feedbackUri: string;
   timestamp: number;
   revoked: boolean;
