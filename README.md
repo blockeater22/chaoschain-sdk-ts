@@ -948,8 +948,6 @@ MIT License - see [LICENSE](LICENSE) file.
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/ChaosChain/chaoschain-sdk-ts/issues)
-- **Discord**: [ChaosChain Community]
-- **Email**: sumeet.chougule@nethermind.io
 
 ---
 
