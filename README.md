@@ -16,9 +16,11 @@ The ChaosChain TypeScript SDK enables developers to build autonomous AI agents w
 - **Type-safe** - Full TypeScript support with exported types
 - **Tree-shakeable** - Optimized bundle size (< 100KB)
 
-**Zero setup required** - all ERC-8004 v1.0 contracts are pre-deployed on 5 networks!
+**Pre-deployed contracts** - ERC-8004 v1.0 contracts are available on supported networks, but you must provide a signer and network configuration.
 
 ## Quick Start
+
+Gateway is the recommended production path for workflow orchestration.
 
 ### Installation
 
@@ -26,62 +28,150 @@ The ChaosChain TypeScript SDK enables developers to build autonomous AI agents w
 
 ```bash
 # Core SDK with ERC-8004 + x402 + Local IPFS
-npm install @chaoschain/sdk ethers@^6.9.0
+npm install @chaoschain/sdk ethers@^6.15.0
 ```
 
-#### With Optional Storage Providers
+#### Optional Storage Providers (Dev Only)
 
-```bash
-# Pinata (cloud IPFS)
-npm install @chaoschain/sdk @pinata/sdk
+Storage backends are optional and intended for development/testing. In production, evidence storage is handled by the Gateway.
 
-# Irys (Arweave permanent storage)
-npm install @chaoschain/sdk @irys/sdk
+### Initialization Requirements (Read First)
+
+- **Signer required**: Provide exactly one of `privateKey`, `mnemonic`, or `walletFile`.
+- **Network required**: `network` must be one of the supported networks.
+- **RPC URL**: Set `rpcUrl` explicitly for production. If omitted, the SDK uses the built-in RPC for the selected network.
+- **Gateway**: Required for orchestration workflows. You must pass `gatewayConfig` (or `gatewayUrl`) to use `sdk.gateway`.
+- **Retries**: Gateway retries are **opt-in** via `gatewayConfig.retry`. The SDK does not add retries.
+
+### Common Configuration Errors (and Fixes)
+
+- **No signer provided** → set `privateKey`, `mnemonic`, or `walletFile`.
+- **Multiple signer fields set** → provide only one.
+- **Unsupported network** → use `NetworkConfig` or a supported network string.
+- **Missing RPC URL** → set `rpcUrl` explicitly (recommended for production).
+- **Using Gateway without config** → pass `gatewayConfig` or `gatewayUrl` to the constructor.
+
+## Canonical Examples
+
+### 1) Minimal “Happy Path” (Gateway-first)
+
+```typescript
+import { ChaosChainSDK, NetworkConfig, AgentRole } from '@chaoschain/sdk';
+import { ethers } from 'ethers';
+
+const required = ['PRIVATE_KEY', 'RPC_URL', 'GATEWAY_URL'];
+for (const key of required) {
+  if (!process.env[key]) throw new Error(`Missing ${key}`);
+}
+
+const sdk = new ChaosChainSDK({
+  agentName: 'MyAgent',
+  agentDomain: 'myagent.example.com',
+  agentRole: AgentRole.WORKER,
+  network: NetworkConfig.BASE_SEPOLIA,
+  privateKey: process.env.PRIVATE_KEY!,
+  rpcUrl: process.env.RPC_URL!,
+  gatewayConfig: {
+    gatewayUrl: process.env.GATEWAY_URL!,
+  },
+});
+
+const health = await sdk.gateway!.healthCheck();
+console.log(`Gateway status: ${health.status}`);
 ```
 
-### Basic Usage
+**Signature auth note**: If you use `authMode: 'signature'`, you must provide a precomputed signature and (optionally) a timestamp. The SDK does not sign requests for you.
+
+### 2) Production Gateway Workflow
+
+```typescript
+import { ChaosChainSDK, NetworkConfig, AgentRole, ScoreSubmissionMode } from '@chaoschain/sdk';
+
+const required = [
+  'PRIVATE_KEY',
+  'RPC_URL',
+  'GATEWAY_URL',
+  'STUDIO_ADDRESS',
+  'AGENT_ADDRESS',
+  'SIGNER_ADDRESS',
+];
+for (const key of required) {
+  if (!process.env[key]) throw new Error(`Missing ${key}`);
+}
+
+const sdk = new ChaosChainSDK({
+  agentName: 'WorkerAgent',
+  agentDomain: 'worker.example.com',
+  agentRole: AgentRole.WORKER,
+  network: NetworkConfig.BASE_SEPOLIA,
+  privateKey: process.env.PRIVATE_KEY!,
+  rpcUrl: process.env.RPC_URL!,
+  gatewayConfig: {
+    gatewayUrl: process.env.GATEWAY_URL!,
+  },
+});
+
+const evidence = Buffer.from(JSON.stringify({ task: 'analysis', ts: Date.now() }));
+const workflow = await sdk.gateway!.submitWork(
+  process.env.STUDIO_ADDRESS!,
+  1,
+  process.env.AGENT_ADDRESS!,
+  '0xDATA_HASH',
+  '0xTHREAD_ROOT',
+  '0xEVIDENCE_ROOT',
+  evidence,
+  process.env.SIGNER_ADDRESS!
+);
+
+const finalStatus = await sdk.gateway!.waitForCompletion(workflow.workflowId);
+console.log(`Workflow state: ${finalStatus.state}`);
+
+await sdk.gateway!.submitScore(
+  process.env.STUDIO_ADDRESS!,
+  1,
+  '0xVALIDATOR_ADDRESS',
+  '0xDATA_HASH',
+  [85, 90, 78, 92, 88],
+  process.env.SIGNER_ADDRESS!,
+  { workerAddress: process.env.AGENT_ADDRESS!, mode: ScoreSubmissionMode.COMMIT_REVEAL }
+);
+```
+
+### 3) Advanced Gateway Config (Auth + Retries)
 
 ```typescript
 import { ChaosChainSDK, NetworkConfig, AgentRole } from '@chaoschain/sdk';
 
-// Initialize SDK
+const required = ['PRIVATE_KEY', 'RPC_URL', 'GATEWAY_URL', 'GATEWAY_API_KEY'];
+for (const key of required) {
+  if (!process.env[key]) throw new Error(`Missing ${key}`);
+}
+
 const sdk = new ChaosChainSDK({
-  agentName: 'MyAgent',
-  agentDomain: 'myagent.example.com',
-  agentRole: AgentRole.SERVER,
+  agentName: 'AdvancedAgent',
+  agentDomain: 'advanced.example.com',
+  agentRole: AgentRole.WORKER,
   network: NetworkConfig.BASE_SEPOLIA,
-  privateKey: process.env.PRIVATE_KEY,
-  enablePayments: true,
-  enableStorage: true,
+  privateKey: process.env.PRIVATE_KEY!,
+  rpcUrl: process.env.RPC_URL!,
+  gatewayConfig: {
+    gatewayUrl: process.env.GATEWAY_URL!,
+    auth: {
+      authMode: 'apiKey',
+      apiKey: process.env.GATEWAY_API_KEY!,
+    },
+    retry: {
+      enabled: true, // retries are opt-in
+      maxRetries: 3,
+      initialDelayMs: 500,
+      maxDelayMs: 4000,
+      jitter: true,
+    },
+  },
 });
 
-// 1. Register on-chain identity (ERC-8004)
-const { agentId, txHash } = await sdk.registerIdentity();
-console.log(`✅ Agent #${agentId} registered on-chain`);
-
-// 2. Execute x402 payment
-const payment = await sdk.executeX402Payment({
-  toAgent: '0x20E7B2A2c8969725b88Dd3EF3a11Bc3353C83F70',
-  amount: '1.5',
-  currency: 'USDC',
-});
-console.log(`💰 Payment sent: ${payment.txHash}`);
-
-// 3. Store evidence on IPFS
-const cid = await sdk.storeEvidence({
-  agentId: agentId.toString(),
-  timestamp: Date.now(),
-  result: 'analysis complete',
-});
-console.log(`📦 Evidence stored: ipfs://${cid}`);
-
-// 4. Give feedback to another agent
-const feedbackTx = await sdk.giveFeedback({
-  agentId: 123n,
-  rating: 95,
-  feedbackUri: `ipfs://${cid}`,
-});
-console.log(`⭐ Feedback submitted: ${feedbackTx}`);
+const health = await sdk.gateway!.healthCheck();
+console.log(`Gateway status: ${health.status}`);
 ```
 
 ## Architecture
@@ -169,47 +259,37 @@ await sdk.requestValidation({
 });
 ```
 
-**Pre-deployed addresses**:
+**Pre-deployed addresses** (ERC-8004 registries):
 
-#### Sepolia
+| Network              | IdentityRegistry | ReputationRegistry | ValidationRegistry |
+| -------------------- | ---------------- | ------------------ | ------------------ |
+| Ethereum Mainnet     | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Ethereum Sepolia     | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | 0x8004CB39f29c09145F24Ad9dDe2A108C1A2cdfC5 |
+| Base Mainnet         | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Base Sepolia         | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Polygon Mainnet      | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Polygon Amoy         | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Arbitrum Mainnet     | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Arbitrum Testnet     | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Celo Mainnet         | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Celo Testnet         | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Gnosis Mainnet       | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Scroll Mainnet       | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Scroll Testnet       | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Taiko Mainnet        | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Monad Mainnet        | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| Monad Testnet        | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
+| Linea Sepolia        | 0x8004aa7C931bCE1233973a0C6A667f73F66282e7 | 0x8004bd8483b99310df121c46ED8858616b2Bba02 | 0x8004c44d1EFdd699B2A26e781eF7F77c56A9a4EB |
+| Hedera Testnet       | 0x4c74ebd72921d537159ed2053f46c12a7d8e5923 | 0xc565edcba77e3abeade40bfd6cf6bf583b3293e0 | 0x18df085d85c586e9241e0cd121ca422f571c2da6 |
+| 0G Testnet           | 0x80043ed9cf33a3472768dcd53175bb44e03a1e4a | 0x80045d7b72c47bf5ff73737b780cb1a5ba8ee202 | 0x80041728e0aadf1d1427f9be18d52b7f3afefafb |
+| BSC Mainnet          | 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 | 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 | — |
+| BSC Testnet          | 0x8004A818BFB912233c491871b3d84c89A494BD9e | 0x8004B663056A597Dffe9eCcC1965A193B7388713 | — |
 
-- Identity: [`0x8004a6090Cd10A7288092483047B097295Fb8847`](https://sepolia.etherscan.io/address/0x8004a6090Cd10A7288092483047B097295Fb8847)
-- Reputation: [`0x8004B8FD1A363aa02fDC07635C0c5F94f6Af5B7E`](https://sepolia.etherscan.io/address/0x8004B8FD1A363aa02fDC07635C0c5F94f6Af5B7E)
-- Validation: [`0x8004CB39f29c09145F24Ad9dDe2A108C1A2cdfC5`](https://sepolia.etherscan.io/address/0x8004CB39f29c09145F24Ad9dDe2A108C1A2cdfC5)
-
-#### Base Sepolia
-
-- Identity: [`0x8004AA63c570c570eBF15376c0dB199918BFe9Fb`](https://sepolia.basescan.org/address/0x8004AA63c570c570eBF15376c0dB199918BFe9Fb)
-- Reputation: [`0x8004bd8daB57f14Ed299135749a5CB5c42d341BF`](https://sepolia.basescan.org/address/0x8004bd8daB57f14Ed299135749a5CB5c42d341BF)
-- Validation: [`0x8004C269D0A5647E51E121FeB226200ECE932d55`](https://sepolia.basescan.org/address/0x8004C269D0A5647E51E121FeB226200ECE932d55)
-
-#### Linea Sepolia
-
-- Identity: [`0x8004aa7C931bCE1233973a0C6A667f73F66282e7`](https://sepolia.lineascan.build/address/0x8004aa7C931bCE1233973a0C6A667f73F66282e7)
-- Reputation: [`0x8004bd8483b99310df121c46ED8858616b2Bba02`](https://sepolia.lineascan.build/address/0x8004bd8483b99310df121c46ED8858616b2Bba02)
-- Validation: [`0x8004c44d1EFdd699B2A26e781eF7F77c56A9a4EB`](https://sepolia.lineascan.build/address/0x8004c44d1EFdd699B2A26e781eF7F77c56A9a4EB)
-
-#### Hedera Testnet
-
-- **IdentityRegistry**: `0x4c74ebd72921d537159ed2053f46c12a7d8e5923`
-- **ReputationRegistry**: `0xc565edcba77e3abeade40bfd6cf6bf583b3293e0`
-- **ValidationRegistry**: `0x18df085d85c586e9241e0cd121ca422f571c2da6`
-
-#### 0G Galileo Testnet
-
-- **IdentityRegistry**: [`0x80043ed9cf33a3472768dcd53175bb44e03a1e4a`](https://chainscan-galileo.0g.ai/address/0x80043ed9cf33a3472768dcd53175bb44e03a1e4a)
-- **ReputationRegistry**: [`0x80045d7b72c47bf5ff73737b780cb1a5ba8ee202`](https://chainscan-galileo.0g.ai/address/0x80045d7b72c47bf5ff73737b780cb1a5ba8ee202)
-- **ValidationRegistry**: [`0x80041728e0aadf1d1427f9be18d52b7f3afefafb`](https://chainscan-galileo.0g.ai/address/0x80041728e0aadf1d1427f9be18d52b7f3afefafb)
-
-#### BSC Testnet:
-
-- **IdentityRegistry**: `0xabbd26d86435b35d9c45177725084ee6a2812e40`
-- **ReputationRegistry**:`0xeced1af52a0446275e9e6e4f6f26c99977400a6a`
-- **ValidationRegistry**: `0x7866bd057f09a4940fe2ce43320518c8749a921e`
+**Note**: You can retrieve the active network’s addresses at runtime via `sdk.getNetworkInfo().contracts`.
 
 ### **x402 Crypto Payments**
 
-Native integration with Coinbase's x402 HTTP 402 protocol:
+Native integration with the x402 HTTP 402 protocol using EIP-3009 authorizations and a facilitator:
 
 ```typescript
 // Execute payment
@@ -228,54 +308,16 @@ const costs = sdk.calculateTotalCost('10.0', 'USDC');
 console.log(`Amount: ${costs.amount}, Fee: ${costs.fee}, Total: ${costs.total}`);
 ```
 
-**Features**:
+**Notes**:
 
-- ✅ Direct USDC transfers (Base, Ethereum, Linea)
-- ✅ Automatic 2.5% protocol fee to ChaosChain
-- ✅ ETH and USDC support
-- ✅ Payment receipts and verification
+- ✅ Uses EIP-3009 `transferWithAuthorization` via a facilitator
+- ✅ Generates HTTP 402 payment requirements and headers
+- ✅ USDC support on supported networks
+- ⚠️ Provide `facilitatorUrl` (and optional `facilitatorApiKey`) for production
 
-### **Pluggable Storage Providers**
+### **Storage (Gateway-First)**
 
-Choose your storage backend:
-
-```typescript
-import { ChaosChainSDK, IPFSLocalStorage, PinataStorage } from '@chaoschain/sdk';
-
-// Local IPFS (default)
-const sdk = new ChaosChainSDK({
-  agentName: 'MyAgent',
-  network: 'base-sepolia',
-  privateKey: process.env.PRIVATE_KEY,
-  // Uses LocalIPFS by default
-});
-
-// Or use Pinata
-const sdk = new ChaosChainSDK({
-  agentName: 'MyAgent',
-  network: 'base-sepolia',
-  privateKey: process.env.PRIVATE_KEY,
-  storageProvider: new PinataStorage({
-    jwt: process.env.PINATA_JWT,
-    gatewayUrl: 'https://gateway.pinata.cloud',
-  }),
-});
-
-// Upload data
-const result = await sdk.storage.upload({ data: 'evidence' });
-console.log(`Uploaded to: ${result.uri}`);
-
-// Download data
-const data = await sdk.storage.download(result.cid);
-```
-
-**Storage Options**:
-
-| Provider       | Cost    | Setup         | Best For          |
-| -------------- | ------- | ------------- | ----------------- |
-| **Local IPFS** | 🆓 Free | `ipfs daemon` | Development       |
-| **Pinata**     | 💰 Paid | API keys      | Production        |
-| **Irys**       | 💰 Paid | Wallet key    | Permanent storage |
+In production, evidence storage is handled by the Gateway during workflow orchestration. The SDK exposes `upload`/`download` methods for local development and testing only.
 
 ### **Gateway Integration** (Production Recommended)
 
@@ -288,54 +330,62 @@ The Gateway is the recommended way to interact with ChaosChain Studios in produc
 - Multi-agent coordination
 
 ```typescript
-import { ChaosChainSDK, GatewayClient } from '@chaoschain/sdk';
+import { ChaosChainSDK, NetworkConfig, AgentRole, ScoreSubmissionMode } from '@chaoschain/sdk';
+
+if (!process.env.PRIVATE_KEY || !process.env.RPC_URL) {
+  throw new Error('Missing PRIVATE_KEY or RPC_URL');
+}
 
 // Initialize SDK with Gateway
 const sdk = new ChaosChainSDK({
   agentName: 'WorkerAgent',
-  network: 'base-sepolia',
-  privateKey: process.env.PRIVATE_KEY,
+  agentDomain: 'worker.example.com',
+  agentRole: AgentRole.WORKER,
+  network: NetworkConfig.BASE_SEPOLIA,
+  privateKey: process.env.PRIVATE_KEY!,
+  rpcUrl: process.env.RPC_URL!,
   gatewayConfig: {
     gatewayUrl: 'https://gateway.chaoschain.io',
   },
 });
 
 // Access Gateway client
-const gateway = sdk.gateway;
+const gateway = sdk.gateway!;
 
 // Health check
 const health = await gateway.healthCheck();
 console.log(`Gateway status: ${health.status}`);
 
 // Submit work via Gateway (recommended)
-const workflow = await gateway.submitWork({
-  studioAddress: '0xStudioAddress',
-  dataHash: '0x...',
-  threadRoot: '0x...',
-  evidenceRoot: '0x...',
-  participants: ['0xWorker1', '0xWorker2'],
-  contributionWeights: [6000, 4000], // 60% and 40%
-  evidenceCid: 'bafybei...',
-});
+const workflow = await gateway.submitWork(
+  '0xStudioAddress',
+  1,
+  '0xAgentAddress',
+  '0xDataHash',
+  '0xThreadRoot',
+  '0xEvidenceRoot',
+  Buffer.from('evidence'),
+  '0xSignerAddress'
+);
 console.log(`Workflow ID: ${workflow.workflowId}`);
 
 // Wait for workflow completion
 const result = await gateway.waitForCompletion(workflow.workflowId);
-console.log(`Workflow status: ${result.status}`);
+console.log(`Workflow state: ${result.state}`);
 
 // Submit score via Gateway
-await gateway.submitScore({
-  studioAddress: '0xStudioAddress',
-  dataHash: '0x...',
-  scores: [85, 90, 78, 92, 88], // Multi-dimensional scores
-  mode: 'COMMIT_REVEAL', // or 'DIRECT'
-});
+await gateway.submitScore(
+  '0xStudioAddress',
+  1,
+  '0xValidatorAddress',
+  '0xDataHash',
+  [85, 90, 78, 92, 88],
+  '0xSignerAddress',
+  { workerAddress: '0xWorkerAddress', mode: ScoreSubmissionMode.COMMIT_REVEAL }
+);
 
 // Close epoch via Gateway
-await gateway.closeEpoch({
-  studioAddress: '0xStudioAddress',
-  epoch: 5,
-});
+await gateway.closeEpoch('0xStudioAddress', 1, '0xSignerAddress');
 ```
 
 **Gateway Methods**:
@@ -343,24 +393,31 @@ await gateway.closeEpoch({
 | Method                   | Description                              |
 | ------------------------ | ---------------------------------------- |
 | `healthCheck()`            | Check Gateway service health             |
-| `submitWork(params)`     | Submit work with evidence and attribution|
-| `submitScore(params)`    | Submit scores (commit-reveal or direct)  |
-| `closeEpoch(params)`     | Close epoch and trigger reward distribution |
+| `submitWork(...)`     | Submit work with evidence and attribution|
+| `submitScore(...)`    | Submit scores (commit-reveal or direct)  |
+| `closeEpoch(...)`     | Close epoch and trigger reward distribution |
 | `getWorkflow(id)`        | Get workflow status by ID                |
 | `listWorkflows(params)`  | List workflows with filters              |
 | `waitForCompletion(id)`  | Poll until workflow completes            |
 
 ### **Studio Client** (Direct On-Chain Access)
 
-For testing, development, or low-level control, use `StudioClient` for direct contract interaction:
+**Warning**: `StudioClient` is low-level and intended for testing or advanced use. For production workflows, prefer Gateway.
 
 ```typescript
-import { ChaosChainSDK } from '@chaoschain/sdk';
+import { ChaosChainSDK, NetworkConfig, AgentRole } from '@chaoschain/sdk';
+
+if (!process.env.PRIVATE_KEY || !process.env.RPC_URL) {
+  throw new Error('Missing PRIVATE_KEY or RPC_URL');
+}
 
 const sdk = new ChaosChainSDK({
   agentName: 'MyAgent',
-  network: 'base-sepolia',
-  privateKey: process.env.PRIVATE_KEY,
+  agentDomain: 'myagent.example.com',
+  agentRole: AgentRole.WORKER,
+  network: NetworkConfig.BASE_SEPOLIA,
+  privateKey: process.env.PRIVATE_KEY!,
+  rpcUrl: process.env.RPC_URL!,
 });
 
 // Access Studio client
@@ -412,25 +469,29 @@ ChaosChain supports multi-agent collaboration with per-worker attribution:
 
 ```typescript
 // Submit work with multiple contributors
-const workflow = await sdk.gateway.submitWork({
-  studioAddress: '0xStudio',
-  dataHash: dataHash,
-  threadRoot: threadRoot,
-  evidenceRoot: evidenceRoot,
-  participants: ['0xWorker1', '0xWorker2', '0xWorker3'],
-  contributionWeights: [4000, 3500, 2500], // Must sum to 10000 (basis points)
-  evidenceCid: 'bafybei...',
-});
+const workflow = await sdk.gateway!.submitWork(
+  '0xStudio',
+  1,
+  '0xAgentAddress',
+  dataHash,
+  threadRoot,
+  evidenceRoot,
+  Buffer.from('evidence'),
+  '0xSignerAddress'
+);
 
 // Verifiers score EACH worker separately
 // Gateway handles DKG causal analysis automatically
-await sdk.gateway.submitScore({
-  studioAddress: '0xStudio',
-  dataHash: dataHash,
+await sdk.gateway!.submitScore(
+  '0xStudio',
+  1,
+  '0xValidatorAddress',
+  dataHash,
   // Scores are 5-dimensional: [Quality, Accuracy, Timeliness, Collaboration, Innovation]
-  scores: [85, 90, 78, 92, 88],
-  mode: 'COMMIT_REVEAL',
-});
+  [85, 90, 78, 92, 88],
+  '0xSignerAddress',
+  { workerAddress: '0xWorkerAddress', mode: 'COMMIT_REVEAL' }
+);
 ```
 
 **How Per-Worker Scoring Works**:
@@ -444,17 +505,36 @@ await sdk.gateway.submitScore({
 
 ## Supported Networks
 
-ERC-8004 v1.0 contracts are **pre-deployed on 5 networks**:
+ERC-8004 v1.0 contracts are **pre-deployed on supported networks**:
 
-| Network              | Chain ID | Status    | Features                     |
-| -------------------- | -------- | --------- | ---------------------------- |
-| **Ethereum Sepolia** | 11155111 | ✅ Active | ERC-8004 + x402 USDC         |
-| **Base Sepolia**     | 84532    | ✅ Active | ERC-8004 + x402 USDC         |
-| **Linea Sepolia**    | 59141    | ✅ Active | ERC-8004 + x402 USDC         |
-| **Hedera Testnet**   | 296      | ✅ Active | ERC-8004                     |
-| **0G Testnet**       | 16600    | ✅ Active | ERC-8004 + Storage + Compute |
+| Network               | Chain ID | Status    | Notes                      |
+| --------------------- | -------- | --------- | -------------------------- |
+| **Ethereum Mainnet**  | 1        | ✅ Active | ERC-8004                   |
+| **Ethereum Sepolia**  | 11155111 | ✅ Active | ERC-8004                   |
+| **Base Mainnet**      | 8453     | ✅ Active | ERC-8004                   |
+| **Base Sepolia**      | 84532    | ✅ Active | ERC-8004                   |
+| **Polygon Mainnet**   | 137      | ✅ Active | ERC-8004                   |
+| **Polygon Amoy**      | 80002    | ✅ Active | ERC-8004                   |
+| **Arbitrum Mainnet**  | 42161    | ✅ Active | ERC-8004                   |
+| **Arbitrum Testnet**  | 421614   | ✅ Active | ERC-8004                   |
+| **Celo Mainnet**      | 42220    | ✅ Active | ERC-8004                   |
+| **Celo Testnet**      | 44787    | ✅ Active | ERC-8004                   |
+| **Gnosis Mainnet**    | 100      | ✅ Active | ERC-8004                   |
+| **Scroll Mainnet**    | 534352   | ✅ Active | ERC-8004                   |
+| **Scroll Testnet**    | 534351   | ✅ Active | ERC-8004                   |
+| **Taiko Mainnet**     | 167000   | ✅ Active | ERC-8004                   |
+| **Monad Mainnet**     | (env)    | ✅ Active | ERC-8004                   |
+| **Monad Testnet**     | (env)    | ✅ Active | ERC-8004                   |
+| **Optimism Sepolia**  | 11155420 | ✅ Active | ERC-8004 (registries 0x0)  |
+| **Linea Sepolia**     | 59141    | ✅ Active | ERC-8004                   |
+| **Hedera Testnet**    | 296      | ✅ Active | ERC-8004                   |
+| **Mode Testnet**      | 919      | ✅ Active | ERC-8004 (registries 0x0)  |
+| **0G Testnet**        | 16602    | ✅ Active | ERC-8004                   |
+| **BSC Mainnet**       | 56       | ✅ Active | ERC-8004                   |
+| **BSC Testnet**       | 97       | ✅ Active | ERC-8004                   |
+| **Local**             | 31337    | ✅ Active | Dev only                   |
 
-Simply change the `network` parameter - no other configuration needed!
+Set `network` explicitly and provide `rpcUrl` for deterministic production deployments. Monad chain IDs are resolved from `MONAD_MAINNET_CHAIN_ID` / `MONAD_TESTNET_CHAIN_ID`.
 
 ## API Reference
 
@@ -468,18 +548,48 @@ Main SDK class with all functionality.
 interface ChaosChainSDKConfig {
   agentName: string; // Your agent's name
   agentDomain: string; // Your agent's domain
-  agentRole: AgentRole | string; // 'server', 'client', 'validator', 'both'
+  agentRole: AgentRole | string; // 'worker', 'verifier', 'client', 'orchestrator'
   network: NetworkConfig | string; // Network to use
-  privateKey?: string; // Wallet private key
-  mnemonic?: string; // Or HD wallet mnemonic
-  rpcUrl?: string; // Custom RPC URL (optional)
-  gatewayUrl?: string; // ChaosChain Gateway URL (for Studios)
-  gatewayConfig?: { gatewayUrl: string }; // Advanced Gateway config (timeouts, polling)
+  privateKey?: string; // Wallet private key (exactly one signer source required)
+  mnemonic?: string; // Or HD wallet mnemonic (exactly one)
+  walletFile?: string; // Or wallet file path (exactly one)
+  rpcUrl?: string; // RPC URL (set explicitly for production)
+  gatewayUrl?: string; // Shortcut for gatewayConfig.gatewayUrl
+  gatewayConfig?: {
+    gatewayUrl: string;
+    timeout?: number; // ms
+    timeoutMs?: number;
+    timeoutSeconds?: number;
+    maxPollTime?: number; // ms
+    maxPollTimeMs?: number;
+    maxPollTimeSeconds?: number;
+    pollInterval?: number; // ms
+    pollIntervalMs?: number;
+    pollIntervalSeconds?: number;
+    headers?: Record<string, string>;
+    auth?: {
+      authMode?: 'apiKey' | 'signature';
+      apiKey?: string;
+      signature?: {
+        address: string;
+        signature: string;
+        timestamp?: number;
+      };
+    };
+    retry?: {
+      enabled?: boolean; // opt-in only
+      maxRetries?: number;
+      initialDelayMs?: number;
+      maxDelayMs?: number;
+      backoffFactor?: number;
+      jitter?: boolean;
+      jitterRatio?: number;
+    };
+  }; // Advanced Gateway config
   enablePayments?: boolean; // Enable x402 payments (default: true)
   enableStorage?: boolean; // Enable storage (default: true)
-  storageProvider?: StorageProvider; // Custom storage provider
+  storageProvider?: StorageProvider; // Custom storage provider (dev/testing)
   computeProvider?: ComputeProvider; // Custom compute provider
-  walletFile?: string; // Load wallet from file
 }
 ```
 
@@ -503,9 +613,9 @@ interface ChaosChainSDKConfig {
 |                | `storage.download(cid)`                         | Download from storage        |
 |                | `storeEvidence(data)`                           | Store evidence (convenience) |
 | **Gateway**    | `gateway.healthCheck()`                           | Check Gateway health         |
-|                | `gateway.submitWork(params)`                    | Submit work via Gateway      |
-|                | `gateway.submitScore(params)`                   | Submit scores via Gateway    |
-|                | `gateway.closeEpoch(params)`                    | Close epoch via Gateway      |
+|                | `gateway.submitWork(...)`                       | Submit work via Gateway      |
+|                | `gateway.submitScore(...)`                      | Submit scores via Gateway    |
+|                | `gateway.closeEpoch(...)`                       | Close epoch via Gateway      |
 |                | `gateway.getWorkflow(id)`                       | Get workflow by ID           |
 |                | `gateway.listWorkflows(params)`                 | List workflows               |
 |                | `gateway.waitForCompletion(id)`                 | Wait for workflow completion |
@@ -587,7 +697,7 @@ async function main() {
   const sdk = new ChaosChainSDK({
     agentName: 'AnalysisAgent',
     agentDomain: 'analysis.example.com',
-    agentRole: AgentRole.SERVER,
+    agentRole: AgentRole.WORKER,
     network: NetworkConfig.BASE_SEPOLIA,
     privateKey: process.env.PRIVATE_KEY,
     enablePayments: true,
@@ -643,14 +753,22 @@ main().catch(console.error);
 ### Complete Studio Workflow
 
 ```typescript
-import { ChaosChainSDK, NetworkConfig, ethers } from '@chaoschain/sdk';
+import { ChaosChainSDK, NetworkConfig, AgentRole } from '@chaoschain/sdk';
+import { ethers } from 'ethers';
 
 async function studioWorkflow() {
+  const required = ['PRIVATE_KEY', 'RPC_URL'];
+  for (const key of required) {
+    if (!process.env[key]) throw new Error(`Missing ${key}`);
+  }
   // 1. Initialize SDK with Gateway
   const sdk = new ChaosChainSDK({
     agentName: 'WorkerAgent',
+    agentDomain: 'worker.example.com',
+    agentRole: AgentRole.WORKER,
     network: NetworkConfig.BASE_SEPOLIA,
-    privateKey: process.env.PRIVATE_KEY,
+    privateKey: process.env.PRIVATE_KEY!,
+    rpcUrl: process.env.RPC_URL!,
     gatewayConfig: {
       gatewayUrl: 'https://gateway.chaoschain.io',
     },
@@ -679,23 +797,24 @@ async function studioWorkflow() {
   const evidenceRoot = ethers.keccak256(ethers.toUtf8Bytes(evidenceCid));
 
   // 5. Submit work via Gateway (recommended for production)
-  const workflow = await sdk.gateway.submitWork({
+  const workflow = await sdk.gateway!.submitWork(
     studioAddress,
+    1,
+    sdk.getAddress(),
     dataHash,
     threadRoot,
     evidenceRoot,
-    participants: [sdk.getAddress()],
-    contributionWeights: [10000], // 100% for single worker
-    evidenceCid,
-  });
+    Buffer.from(JSON.stringify(workResult)),
+    sdk.getAddress()
+  );
   console.log(`Work submitted: ${workflow.workflowId}`);
 
   // 6. Wait for verifiers to score (in production, this happens asynchronously)
-  const result = await sdk.gateway.waitForCompletion(workflow.workflowId, {
-    timeout: 300000, // 5 minutes
+  const result = await sdk.gateway!.waitForCompletion(workflow.workflowId, {
+    maxWait: 300000, // 5 minutes
     pollInterval: 5000, // Check every 5 seconds
   });
-  console.log(`Workflow completed: ${result.status}`);
+  console.log(`Workflow completed: ${result.state}`);
 
   // 7. Check and withdraw rewards after epoch closes
   const rewards = await sdk.studio.getPendingRewards(studioAddress, sdk.getAddress());
@@ -711,19 +830,27 @@ studioWorkflow().catch(console.error);
 ### Verifier Agent Example
 
 ```typescript
-import { ChaosChainSDK, NetworkConfig, ethers } from '@chaoschain/sdk';
+import { ChaosChainSDK, NetworkConfig, AgentRole, ScoreSubmissionMode } from '@chaoschain/sdk';
+import { ethers } from 'ethers';
 
 async function verifierWorkflow() {
+  const required = ['PRIVATE_KEY', 'RPC_URL', 'STUDIO_ADDRESS', 'DATA_HASH', 'VALIDATOR_ADDRESS'];
+  for (const key of required) {
+    if (!process.env[key]) throw new Error(`Missing ${key}`);
+  }
   const sdk = new ChaosChainSDK({
     agentName: 'VerifierAgent',
+    agentDomain: 'verifier.example.com',
+    agentRole: AgentRole.VERIFIER,
     network: NetworkConfig.BASE_SEPOLIA,
-    privateKey: process.env.PRIVATE_KEY,
+    privateKey: process.env.PRIVATE_KEY!,
+    rpcUrl: process.env.RPC_URL!,
     gatewayConfig: {
       gatewayUrl: 'https://gateway.chaoschain.io',
     },
   });
 
-  const studioAddress = '0xYourStudioAddress';
+  const studioAddress = process.env.STUDIO_ADDRESS!;
 
   // Register as VERIFIER
   await sdk.studio.registerWithStudio(
@@ -734,22 +861,25 @@ async function verifierWorkflow() {
   );
 
   // List pending workflows to score
-  const workflows = await sdk.gateway.listWorkflows({
-    studioAddress,
-    status: 'PENDING_VERIFICATION',
+  const workflows = await sdk.gateway!.listWorkflows({
+    studio: studioAddress,
+    state: 'CREATED',
   });
 
-  for (const workflow of workflows.workflows) {
+  for (const workflow of workflows) {
     // Evaluate the work (your scoring logic here)
     const scores = evaluateWork(workflow);
 
     // Submit score via Gateway (handles commit-reveal automatically)
-    await sdk.gateway.submitScore({
+    await sdk.gateway!.submitScore(
       studioAddress,
-      dataHash: workflow.dataHash,
+      1,
+      process.env.VALIDATOR_ADDRESS!,
+      process.env.DATA_HASH!,
       scores, // [Quality, Accuracy, Timeliness, Collaboration, Innovation]
-      mode: 'COMMIT_REVEAL',
-    });
+      sdk.getAddress(),
+      { workerAddress: sdk.getAddress(), mode: ScoreSubmissionMode.COMMIT_REVEAL }
+    );
     console.log(`Scored workflow: ${workflow.workflowId}`);
   }
 }
@@ -819,12 +949,14 @@ ETHEREUM_SEPOLIA_RPC_URL=https://rpc.sepolia.org
 # Gateway (for ChaosChain Studios)
 GATEWAY_URL=https://gateway.chaoschain.io
 
-# Storage Providers
-PINATA_JWT=your_pinata_jwt
-PINATA_GATEWAY=https://gateway.pinata.cloud
-
 # Optional: Custom RPC endpoints
 LINEA_SEPOLIA_RPC_URL=https://rpc.sepolia.linea.build
+
+# Monad (required when using monad-mainnet / monad-testnet)
+MONAD_MAINNET_CHAIN_ID=12345
+MONAD_MAINNET_RPC_URL=https://...
+MONAD_TESTNET_CHAIN_ID=12346
+MONAD_TESTNET_RPC_URL=https://...
 ```
 
 ### TypeScript Configuration
@@ -880,8 +1012,7 @@ The SDK is optimized for minimal bundle size:
 // Import only what you need
 import { ChaosChainSDK, NetworkConfig } from '@chaoschain/sdk';
 
-// Or import storage providers separately
-import { PinataStorage } from '@chaoschain/sdk/providers/storage';
+// Import only what you need (tree-shakeable)
 ```
 
 ## Testing
@@ -900,7 +1031,7 @@ npm run test:coverage
 ## FAQ
 
 **Q: Do I need to deploy contracts?**
-A: No! All ERC-8004 v1.0 contracts are pre-deployed on 5 networks.
+A: No. ERC-8004 v1.0 contracts are pre-deployed on the supported networks listed above.
 
 **Q: What's the difference between Python and TypeScript SDK?**
 A: Both SDKs have feature parity. Use TypeScript for web/Node.js apps, Python for backend services.

@@ -27,7 +27,8 @@ import {
   ComputeProvider,
 } from './types';
 import { PaymentMethod } from './types';
-import { getNetworkInfo, getContractAddresses } from './utils/networks';
+import { getNetworkInfo, getContractAddresses, getSupportedNetworks } from './utils/networks';
+import { ConfigurationError } from './exceptions';
 //
 import { GatewayClient } from './GatewayClient';
 import { StudioClient } from './StudioClient';
@@ -48,6 +49,8 @@ import type { WorkflowStatus, ScoreSubmissionMode } from './types';
  * - HTTP 402 paywall server
  */
 export class ChaosChainSDK {
+  private static warnedGatewayMissing = false;
+  private static warnedStudioClientProduction = false;
   // Core components
   private walletManager: WalletManager;
   private chaosAgent: ChaosAgent;
@@ -80,35 +83,101 @@ export class ChaosChainSDK {
   private _agentId?: bigint;
 
   constructor(config: ChaosChainSDKConfig) {
+    const signerSources = [config.privateKey, config.mnemonic, config.walletFile].filter(Boolean);
+    if (signerSources.length > 1) {
+      throw new ConfigurationError(
+        'Invalid wallet configuration: provide only one of privateKey, mnemonic, or walletFile.',
+        {
+          provided: signerSources.map((source) =>
+            typeof source === 'string' ? 'string' : 'unknown'
+          ),
+        }
+      );
+    }
+    if (signerSources.length === 0) {
+      throw new ConfigurationError(
+        'No signer configuration provided. Set privateKey, mnemonic, or walletFile to initialize the SDK.',
+        { required: ['privateKey', 'mnemonic', 'walletFile'] }
+      );
+    }
+
     this.agentName = config.agentName;
     this.agentDomain = config.agentDomain;
     this.agentRole = config.agentRole;
     this.network = config.network;
 
     // Get network info
-    this.networkInfo = getNetworkInfo(config.network);
+    if (!config.network) {
+      throw new ConfigurationError('Network is required to initialize the SDK.', {
+        required: 'network',
+      });
+    }
+    try {
+      this.networkInfo = getNetworkInfo(config.network);
+    } catch (error) {
+      throw new ConfigurationError(
+        `Unsupported network "${String(config.network)}".`,
+        {
+          supported: getSupportedNetworks(),
+          cause: (error as Error).message,
+        }
+      );
+    }
+    if (!this.networkInfo.chainId || Number.isNaN(this.networkInfo.chainId)) {
+      throw new ConfigurationError(
+        `Invalid chainId for network "${String(config.network)}".`,
+        { chainId: this.networkInfo.chainId }
+      );
+    }
 
     // Initialize provider
     const rpcUrl = config.rpcUrl || this.networkInfo.rpcUrl;
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    if (!rpcUrl || typeof rpcUrl !== 'string' || rpcUrl.trim().length === 0) {
+      throw new ConfigurationError(
+        `RPC URL is required for network "${String(config.network)}".`,
+        { network: config.network, hint: 'Provide rpcUrl in SDK config.' }
+      );
+    }
+    try {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    } catch (error) {
+      throw new ConfigurationError(
+        `Failed to initialize provider for network "${String(config.network)}".`,
+        { rpcUrl, cause: (error as Error).message }
+      );
+    }
 
     // Initialize wallet
-    this.walletManager = new WalletManager(
-      {
-        privateKey: config.privateKey,
-        mnemonic: config.mnemonic,
-        walletFile: config.walletFile,
-      },
-      this.provider
-    );
+    try {
+      this.walletManager = new WalletManager(
+        {
+          privateKey: config.privateKey,
+          mnemonic: config.mnemonic,
+          walletFile: config.walletFile,
+        },
+        this.provider
+      );
+    } catch (error) {
+      throw new ConfigurationError(
+        'Failed to initialize wallet. Check privateKey, mnemonic, or walletFile.',
+        { cause: (error as Error).message }
+      );
+    }
 
     // Initialize ChaosAgent (ERC-8004)
-    const contractAddresses = getContractAddresses(config.network);
-    this.chaosAgent = new ChaosAgent(
-      contractAddresses,
-      this.walletManager.getWallet(),
-      this.provider
-    );
+    try {
+      const contractAddresses = getContractAddresses(config.network);
+      this.chaosAgent = new ChaosAgent(
+        contractAddresses,
+        this.walletManager.getWallet(),
+        this.provider
+      );
+    } catch (error) {
+      throw new ConfigurationError(
+        `Failed to initialize ERC-8004 contracts for network "${String(config.network)}".`,
+        { network: config.network, cause: (error as Error).message }
+      );
+    }
 
     // Initialize storage provider
     if (config.storageProvider) {
@@ -207,6 +276,24 @@ export class ChaosChainSDK {
       signer: this.walletManager.getWallet(),
       network: typeof config.network === 'string' ? config.network : config.network,
     });
+
+    const isLocalNetwork = String(config.network) === NetworkConfig.LOCAL || String(config.network) === 'local';
+    if (!this.gateway && !isLocalNetwork && !ChaosChainSDK.warnedGatewayMissing) {
+      console.warn(
+        '⚠️ Gateway is not configured. For production workflows, use gatewayConfig to enable Gateway orchestration.'
+      );
+      ChaosChainSDK.warnedGatewayMissing = true;
+    }
+    if (
+      process.env.NODE_ENV === 'production' &&
+      !isLocalNetwork &&
+      !ChaosChainSDK.warnedStudioClientProduction
+    ) {
+      console.warn(
+        '⚠️ StudioClient is intended for low-level or testing use. In production, prefer Gateway workflows.'
+      );
+      ChaosChainSDK.warnedStudioClientProduction = true;
+    }
 
     console.log(`🚀 ChaosChain SDK initialized for ${this.agentName}`);
     console.log(`   Network: ${this.network}`);
@@ -813,7 +900,10 @@ export class ChaosChainSDK {
    */
   getGateway(): GatewayClient {
     if (!this.gateway) {
-      throw new Error(`Gateway not configured pass gatewayConfig to SDK constructor`);
+      throw new ConfigurationError(
+        'Gateway is not configured. Provide gatewayConfig (or gatewayUrl) when constructing the SDK.',
+        { required: 'gatewayConfig' }
+      );
     }
     return this.gateway;
   }

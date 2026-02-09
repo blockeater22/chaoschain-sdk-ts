@@ -6,6 +6,16 @@ import {
   WorkflowProgress,
   WorkflowError as WorkflowErrorType,
   GatewayClientConfig,
+  GatewayHealthResponse,
+  GatewayWorkflowResponse,
+  GatewayListWorkflowsResponse,
+  GatewayWorkSubmissionRequest,
+  GatewayScoreSubmissionRequest,
+  GatewayCloseEpochRequest,
+  GatewayAuthConfig,
+  GatewayErrorCategory,
+  GatewayErrorInfo,
+  GatewayRetryConfig,
   ScoreSubmissionMode,
 } from './types';
 import {
@@ -20,17 +30,173 @@ export class GatewayClient {
   private timeout: number;
   private maxPollTime: number;
   private pollInterval: number;
+  private defaultHeaders?: Record<string, string>;
+  private auth?: GatewayAuthConfig;
+  private retryConfig?: GatewayRetryConfig;
 
   constructor(config: GatewayClientConfig) {
     this.gatewayUrl = config.gatewayUrl.replace(/\/$/, ''); // Remove trailing slash
-    this.timeout = config.timeout || 30000; // Default timeout 30s
-    this.maxPollTime = config.maxPollTime || 600000; // Default max poll time 10min
-    this.pollInterval = config.pollInterval || 2000; // Default poll interval 2s
+    this.timeout = this._resolveTimeout(
+      config.timeoutMs,
+      config.timeoutSeconds,
+      config.timeout,
+      30000
+    ); // Default timeout 30s
+    this.maxPollTime = this._resolveTimeout(
+      config.maxPollTimeMs,
+      config.maxPollTimeSeconds,
+      config.maxPollTime,
+      600000
+    ); // Default max poll time 10min
+    this.pollInterval = this._resolveTimeout(
+      config.pollIntervalMs,
+      config.pollIntervalSeconds,
+      config.pollInterval,
+      2000
+    ); // Default poll interval 2s
+    this.defaultHeaders = config.headers;
+    this.auth = config.auth;
+    this.retryConfig = config.retry;
   }
 
   // ===========================================================================
   // Private: HTTP Request
   // ===========================================================================
+
+  // Resolve timeout with explicit ms taking precedence, then seconds, then legacy ms.
+  private _resolveTimeout(
+    timeoutMs?: number,
+    timeoutSeconds?: number,
+    legacyTimeoutMs?: number,
+    defaultMs?: number
+  ): number {
+    if (typeof timeoutMs === 'number') return timeoutMs;
+    if (typeof timeoutSeconds === 'number') return timeoutSeconds * 1000;
+    if (typeof legacyTimeoutMs === 'number') return legacyTimeoutMs;
+    return defaultMs ?? 0;
+  }
+
+  private _resolveAuthMode(): GatewayAuthConfig['authMode'] | undefined {
+    if (!this.auth) return undefined;
+    if (this.auth.authMode) return this.auth.authMode;
+    if (this.auth.apiKey) return 'apiKey';
+    if (this.auth.signature) return 'signature';
+    return undefined;
+  }
+
+  private _buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (this.defaultHeaders) {
+      Object.assign(headers, this.defaultHeaders);
+    }
+
+    const authMode = this._resolveAuthMode();
+    if (authMode === 'apiKey' && this.auth?.apiKey) {
+      headers['X-API-Key'] = this.auth.apiKey;
+    }
+
+    // Signature auth expects caller-provided signature and optional timestamp.
+    if (authMode === 'signature' && this.auth?.signature) {
+      const timestamp = this.auth.signature.timestamp ?? Date.now();
+      headers['X-Signature'] = this.auth.signature.signature;
+      headers['X-Timestamp'] = `${timestamp}`;
+      headers['X-Address'] = this.auth.signature.address;
+    }
+
+    if (!headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    return headers;
+  }
+
+  private _classifyStatusCode(statusCode?: number): GatewayErrorInfo {
+    if (statusCode === 401 || statusCode === 403) {
+      return { statusCode, category: 'auth', retryable: false };
+    }
+
+    if (statusCode === 408 || statusCode === 429 || (statusCode !== undefined && statusCode >= 500)) {
+      return { statusCode, category: 'transient', retryable: true };
+    }
+
+    if (statusCode !== undefined && statusCode >= 400) {
+      return { statusCode, category: 'permanent', retryable: false };
+    }
+
+    return { statusCode, category: 'unknown', retryable: false };
+  }
+
+  private _normalizeError(error: AxiosError): GatewayError {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      const connectionError = new GatewayConnectionError(
+        `Failed to connect to Gateway at ${this.gatewayUrl}`
+      );
+      connectionError.details.category = 'transient';
+      connectionError.details.retryable = true;
+      (connectionError as any).category = 'transient' as GatewayErrorCategory;
+      (connectionError as any).retryable = true;
+      return connectionError;
+    }
+
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+      const timeoutError = new GatewayTimeoutError(
+        'timeout',
+        `request to Gateway timed out: ${error.message}`
+      );
+      timeoutError.details.category = 'transient';
+      timeoutError.details.retryable = true;
+      (timeoutError as any).category = 'transient' as GatewayErrorCategory;
+      (timeoutError as any).retryable = true;
+      return timeoutError;
+    }
+
+    if (error.response) {
+      const data = error.response.data as Record<string, any>;
+      const message = data?.error || data?.message || 'Unknown error from Gateway';
+      const classification = this._classifyStatusCode(error.response.status);
+      const gatewayError = new GatewayError(`Gateway returned error: ${message}`, {
+        statusCode: error.response.status,
+        response: data,
+        category: classification.category,
+        retryable: classification.retryable,
+      });
+      (gatewayError as any).category = classification.category;
+      (gatewayError as any).retryable = classification.retryable;
+      return gatewayError;
+    }
+
+    const classification = this._classifyStatusCode(undefined);
+    const unknownError = new GatewayError(`Gateway request failed: ${error.message}`, {
+      category: classification.category,
+      retryable: classification.retryable,
+    });
+    (unknownError as any).category = classification.category;
+    (unknownError as any).retryable = classification.retryable;
+    return unknownError;
+  }
+
+  private _getRetryDelayMs(attempt: number): number {
+    const initialDelayMs = this.retryConfig?.initialDelayMs ?? 500;
+    const backoffFactor = this.retryConfig?.backoffFactor ?? 2;
+    const maxDelayMs = this.retryConfig?.maxDelayMs ?? 8000;
+    const jitterEnabled = this.retryConfig?.jitter ?? true;
+    const jitterRatio = this.retryConfig?.jitterRatio ?? 0.2;
+
+    let delay = Math.min(maxDelayMs, initialDelayMs * Math.pow(backoffFactor, attempt));
+    if (jitterEnabled) {
+      const delta = delay * jitterRatio;
+      delay = delay + (Math.random() * 2 - 1) * delta;
+      delay = Math.max(0, delay);
+    }
+    return Math.round(delay);
+  }
+
+  private async _sleep(durationMs: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, durationMs));
+  }
 
   /**
    * Make HTTP request to Gateway.
@@ -42,50 +208,48 @@ export class GatewayClient {
     data?: Record<string, any>
   ): Promise<T> {
     const url = `${this.gatewayUrl}${path}`;
+    // Retries are disabled by default; only enabled retries for transient errors.
+    const maxRetries = this.retryConfig?.maxRetries ?? 3;
+    const retriesEnabled = this.retryConfig?.enabled === true;
+    let attempt = 0;
 
-    try {
-      const response = await axios({
-        method,
-        url,
-        data,
-        timeout: this.timeout,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        const response = await axios({
+          method,
+          url,
+          data,
+          timeout: this.timeout,
+          headers: this._buildHeaders(),
+        });
 
-      return response.data;
-    } catch (error) {
-      this._handleError(error as AxiosError);
+        return response.data as T;
+      } catch (error) {
+        const normalizedError = this._normalizeError(error as AxiosError);
+        const category = (normalizedError as any).category as GatewayErrorCategory | undefined;
+        const retryable = (normalizedError as any).retryable as boolean | undefined;
+        const shouldRetry =
+          retriesEnabled === true &&
+          category === 'transient' &&
+          retryable === true &&
+          attempt < maxRetries;
+
+        if (!shouldRetry) {
+          throw normalizedError;
+        }
+
+        const delay = this._getRetryDelayMs(attempt);
+        attempt += 1;
+        await this._sleep(delay);
+      }
     }
-  }
-
-  /**
-   * Transform axios errors to Gateway exceptions.
-   */
-  private _handleError(error: AxiosError): never {
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-      throw new GatewayConnectionError(`Failed to connect to Gateway at ${this.gatewayUrl}`);
-    }
-
-    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      throw new GatewayTimeoutError('timeout', `request to Gateway timed out: ${error.message}`);
-    }
-
-    if (error.response) {
-      const data = error.response.data as any;
-      const message = data?.error || data?.message || 'Unknown error from Gateway';
-      throw new GatewayError(`Gateway returned error: ${message}`, {
-        statusCode: error.response.status,
-        response: data,
-      });
-    }
-
-    throw new GatewayError(`Gateway request failed: ${error.message}`);
   }
 
   /**
    * Parse workflow status from API response.
    */
-  private _parseWorkflowStatus(data: any): WorkflowStatus {
+  private _parseWorkflowStatus(data: GatewayWorkflowResponse): WorkflowStatus {
     const progress: WorkflowProgress = {
       arweaveTxId: data.progress?.arweave_tx_id,
       arweaveConfirmed: data.progress?.arweave_confirmed,
@@ -121,8 +285,8 @@ export class GatewayClient {
   // Health Check
   // ===========================================================================
 
-  async healthCheck(): Promise<{ status: string; timestamp?: number }> {
-    return this._request('GET', '/health');
+  async healthCheck(): Promise<GatewayHealthResponse> {
+    return this._request<GatewayHealthResponse>('GET', '/health');
   }
 
   async isHealthy(): Promise<boolean> {
@@ -171,7 +335,7 @@ export class GatewayClient {
       ? evidenceContent.toString('base64')
       : Buffer.from(evidenceContent, 'utf-8').toString('base64');
 
-    const payload = {
+    const payload: GatewayWorkSubmissionRequest = {
       studio_address: studioAddress,
       epoch,
       agent_address: agentAddress,
@@ -182,7 +346,11 @@ export class GatewayClient {
       signer_address: signerAddress,
     };
 
-    const result = await this._request<any>('POST', '/workflows/work-submission', payload);
+    const result = await this._request<GatewayWorkflowResponse>(
+      'POST',
+      '/workflows/work-submission',
+      payload
+    );
     return this._parseWorkflowStatus(result);
   }
 
@@ -225,7 +393,7 @@ export class GatewayClient {
       throw new Error('salt is required for COMMIT_REVEAL score scoring mode');
     }
 
-    const payload: Record<string, any> = {
+    const payload: GatewayScoreSubmissionRequest = {
       studio_address: studioAddress,
       epoch: epoch,
       validator_address: validatorAddress,
@@ -233,6 +401,7 @@ export class GatewayClient {
       scores,
       signer_address: signerAddress,
       mode: mode,
+      salt: options?.salt ?? '0x' + '0'.repeat(64),
     };
 
     if (options?.workerAddress) {
@@ -240,8 +409,11 @@ export class GatewayClient {
     }
 
     // Gateway requires salt field (event if unused in direct mode)
-    payload.salt = options?.salt ?? '0x' + '0'.repeat(64);
-    const result = await this._request<any>('POST', '/workflows/score-submission', payload);
+    const result = await this._request<GatewayWorkflowResponse>(
+      'POST',
+      '/workflows/score-submission',
+      payload
+    );
     return this._parseWorkflowStatus(result);
   }
 
@@ -260,13 +432,17 @@ export class GatewayClient {
     epoch: number,
     signerAddress: string
   ): Promise<WorkflowStatus> {
-    const payload = {
+    const payload: GatewayCloseEpochRequest = {
       studio_address: studioAddress,
       epoch,
       signer_address: signerAddress,
     };
 
-    const result = await this._request<any>('POST', '/workflows/close-epoch', payload);
+    const result = await this._request<GatewayWorkflowResponse>(
+      'POST',
+      '/workflows/close-epoch',
+      payload
+    );
     return this._parseWorkflowStatus(result);
   }
 
@@ -279,7 +455,7 @@ export class GatewayClient {
    * GET /workflows/{id}
    */
   async getWorkflow(workflowId: string): Promise<WorkflowStatus> {
-    const result = await this._request<any>('GET', `/workflows/${workflowId}`);
+    const result = await this._request<GatewayWorkflowResponse>('GET', `/workflows/${workflowId}`);
     return this._parseWorkflowStatus(result);
   }
 
@@ -298,8 +474,11 @@ export class GatewayClient {
     if (options?.workflowType) params.push(`type=${options.workflowType}`);
 
     const queryString = params.length > 0 ? `?${params.join('&')}` : '';
-    const result = await this._request<any>('GET', `/workflows${queryString}`);
-    return (result.workflows || []).map((w: any) => this._parseWorkflowStatus(w));
+    const result = await this._request<GatewayListWorkflowsResponse>(
+      'GET',
+      `/workflows${queryString}`
+    );
+    return (result.workflows || []).map((w) => this._parseWorkflowStatus(w));
   }
 
   // ===========================================================================

@@ -63,6 +63,195 @@ describe('GatewayClient', () => {
       expect((c as any).maxPollTime).toBe(600000);
       expect((c as any).pollInterval).toBe(2000);
     });
+
+    it('should resolve timeoutSeconds to milliseconds', () => {
+      const c = new GatewayClient({
+        gatewayUrl: 'http://test.com',
+        timeoutSeconds: 2,
+        maxPollTimeSeconds: 5,
+        pollIntervalSeconds: 3,
+      });
+      expect((c as any).timeout).toBe(2000);
+      expect((c as any).maxPollTime).toBe(5000);
+      expect((c as any).pollInterval).toBe(3000);
+    });
+
+    it('should prioritize timeoutMs over timeoutSeconds and legacy timeout', () => {
+      const c = new GatewayClient({
+        gatewayUrl: 'http://test.com',
+        timeoutMs: 1000,
+        timeoutSeconds: 5,
+        timeout: 8000,
+      });
+      expect((c as any).timeout).toBe(1000);
+    });
+  });
+
+  describe('headers', () => {
+    it('should always include Content-Type header', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        data: { status: 'ok' },
+      });
+
+      await client.healthCheck();
+
+      const callArgs = mockedAxios.mock.calls[0][0] as unknown as { headers: Record<string, string> };
+      expect(callArgs.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('should include X-API-Key when apiKey auth is enabled', async () => {
+      const authedClient = new GatewayClient({
+        gatewayUrl,
+        auth: { authMode: 'apiKey', apiKey: 'test-key' },
+      });
+      mockedAxios.mockResolvedValueOnce({
+        data: { status: 'ok' },
+      });
+
+      await authedClient.healthCheck();
+
+      const callArgs = mockedAxios.mock.calls[0][0] as unknown as { headers: Record<string, string> };
+      expect(callArgs.headers['X-API-Key']).toBe('test-key');
+      expect(callArgs.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('should include signature headers when signature auth is enabled', async () => {
+      const authedClient = new GatewayClient({
+        gatewayUrl,
+        auth: {
+          authMode: 'signature',
+          signature: { address: '0xAddr', signature: '0xSig', timestamp: 12345 },
+        },
+      });
+      mockedAxios.mockResolvedValueOnce({
+        data: { status: 'ok' },
+      });
+
+      await authedClient.healthCheck();
+
+      const callArgs = mockedAxios.mock.calls[0][0] as unknown as { headers: Record<string, string> };
+      expect(callArgs.headers['X-Signature']).toBe('0xSig');
+      expect(callArgs.headers['X-Timestamp']).toBe('12345');
+      expect(callArgs.headers['X-Address']).toBe('0xAddr');
+    });
+
+    it('should allow user headers to override defaults', async () => {
+      const customClient = new GatewayClient({
+        gatewayUrl,
+        headers: { 'Content-Type': 'text/plain', 'X-Custom': '1' },
+      });
+      mockedAxios.mockResolvedValueOnce({
+        data: { status: 'ok' },
+      });
+
+      await customClient.healthCheck();
+
+      const callArgs = mockedAxios.mock.calls[0][0] as unknown as { headers: Record<string, string> };
+      expect(callArgs.headers['Content-Type']).toBe('text/plain');
+      expect(callArgs.headers['X-Custom']).toBe('1');
+    });
+  });
+
+  describe('error taxonomy', () => {
+    const getError = async () => {
+      try {
+        await client.healthCheck();
+      } catch (error) {
+        return error as any;
+      }
+      throw new Error('Expected request to fail');
+    };
+
+    it('should classify 401/403 as auth errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'unauthorized' } },
+      });
+      const error401 = await getError();
+      expect(error401.details.category).toBe('auth');
+      expect(error401.details.retryable).toBe(false);
+
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 403, data: { message: 'forbidden' } },
+      });
+      const error403 = await getError();
+      expect(error403.details.category).toBe('auth');
+      expect(error403.details.retryable).toBe(false);
+    });
+
+    it('should classify 429/5xx as transient errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 429, data: { message: 'rate limit' } },
+      });
+      const error429 = await getError();
+      expect(error429.details.category).toBe('transient');
+      expect(error429.details.retryable).toBe(true);
+
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'server error' } },
+      });
+      const error500 = await getError();
+      expect(error500.details.category).toBe('transient');
+      expect(error500.details.retryable).toBe(true);
+    });
+
+    it('should classify 4xx as permanent errors', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 404, data: { message: 'not found' } },
+      });
+      const error404 = await getError();
+      expect(error404.details.category).toBe('permanent');
+      expect(error404.details.retryable).toBe(false);
+    });
+  });
+
+  describe('retry behavior', () => {
+    it('should not retry by default', async () => {
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 500, data: { message: 'server error' } },
+      });
+
+      await expect(client.healthCheck()).rejects.toThrow(GatewayError);
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry only transient errors when enabled', async () => {
+      const retryClient = new GatewayClient({
+        gatewayUrl,
+        retry: { enabled: true, maxRetries: 2, initialDelayMs: 0, maxDelayMs: 0, jitter: false },
+      });
+      mockedAxios.mockRejectedValue({
+        response: { status: 500, data: { message: 'server error' } },
+      });
+
+      await expect(retryClient.healthCheck()).rejects.toThrow(GatewayError);
+      expect(mockedAxios).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not retry auth errors when enabled', async () => {
+      const retryClient = new GatewayClient({
+        gatewayUrl,
+        retry: { enabled: true, maxRetries: 2, initialDelayMs: 0, maxDelayMs: 0, jitter: false },
+      });
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'unauthorized' } },
+      });
+
+      await expect(retryClient.healthCheck()).rejects.toThrow(GatewayError);
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not retry permanent errors when enabled', async () => {
+      const retryClient = new GatewayClient({
+        gatewayUrl,
+        retry: { enabled: true, maxRetries: 2, initialDelayMs: 0, maxDelayMs: 0, jitter: false },
+      });
+      mockedAxios.mockRejectedValueOnce({
+        response: { status: 404, data: { message: 'not found' } },
+      });
+
+      await expect(retryClient.healthCheck()).rejects.toThrow(GatewayError);
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('healthCheck', () => {

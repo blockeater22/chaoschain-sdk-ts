@@ -35,16 +35,15 @@ describe('ChaosChainSDK', () => {
       expect(sdk).toBeDefined();
     });
 
-    it('should generate wallet if no private key provided', () => {
-      const sdk = new ChaosChainSDK({
-        agentName: 'TestAgent',
-        agentDomain: 'test.example.com',
-        agentRole: AgentRole.CLIENT,
-        network: NetworkConfig.ETHEREUM_SEPOLIA,
-      });
-
-      expect(sdk).toBeDefined();
-      expect(sdk.walletManager).toBeDefined();
+    it('should throw if no signer configuration provided', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.CLIENT,
+          network: NetworkConfig.ETHEREUM_SEPOLIA,
+        });
+      }).toThrow();
     });
 
     it('should initialize with feature flags', () => {
@@ -87,6 +86,46 @@ describe('ChaosChainSDK', () => {
 
       expect(sdk).toBeDefined();
       expect(sdk.walletManager).toBeDefined();
+    });
+  });
+
+  describe('Constructor Validation', () => {
+    it('should throw on mutually exclusive wallet config', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: testPrivateKey,
+          mnemonic: 'test test test test test test test test test test test junk',
+        });
+      }).toThrow();
+    });
+
+    it('should throw when rpcUrl is missing', () => {
+      expect(() => {
+        new ChaosChainSDK({
+          agentName: 'TestAgent',
+          agentDomain: 'test.example.com',
+          agentRole: AgentRole.SERVER,
+          network: NetworkConfig.BASE_SEPOLIA,
+          privateKey: testPrivateKey,
+          rpcUrl: '   ',
+        });
+      }).toThrow();
+    });
+
+    it('should throw when accessing gateway without gatewayConfig', () => {
+      const sdk = new ChaosChainSDK({
+        agentName: 'TestAgent',
+        agentDomain: 'test.example.com',
+        agentRole: AgentRole.SERVER,
+        network: NetworkConfig.BASE_SEPOLIA,
+        privateKey: testPrivateKey,
+      });
+
+      expect(() => sdk.getGateway()).toThrow();
     });
   });
 

@@ -19,15 +19,80 @@ export const ERC8004_ADDRESSES: Record<string, ContractAddresses> = {
     reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
     validation: '0x8004CB39f29c09145F24Ad9dDe2A108C1A2cdfC5',
   },
+  'base-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'polygon-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'polygon-amoy': {
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'arbitrum-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'arbitrum-testnet': {
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'celo-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'celo-testnet': {
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'gnosis-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'scroll-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'scroll-testnet': {
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'taiko-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'monad-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
+  'monad-testnet': {
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
   'optimism-sepolia': {
     identity: '0x0000000000000000000000000000000000000000',
     reputation: '0x0000000000000000000000000000000000000000',
     validation: '0x0000000000000000000000000000000000000000',
   },
   'base-sepolia': {
-    identity: '0x8004AA63c570c570eBF15376c0dB199918BFe9Fb',
-    reputation: '0x8004bd8daB57f14Ed299135749a5CB5c42d341BF',
-    validation: '0x8004C269D0A5647E51E121FeB226200ECE932d55',
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
   },
   'mode-testnet': {
     identity: '0x0000000000000000000000000000000000000000',
@@ -49,10 +114,15 @@ export const ERC8004_ADDRESSES: Record<string, ContractAddresses> = {
     reputation: '0x80045d7b72c47bf5ff73737b780cb1a5ba8ee202',
     validation: '0x80041728e0aadf1d1427f9be18d52b7f3afefafb',
   },
+  'bsc-mainnet': {
+    identity: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+    reputation: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+    validation: '0x0000000000000000000000000000000000000000',
+  },
   'bsc-testnet': {
-    identity: '0xabbd26d86435b35d9c45177725084ee6a2812e40',
-    reputation: '0xeced1af52a0446275e9e6e4f6f26c99977400a6a',
-    validation: '0x7866bd057f09a4940fe2ce43320518c8749a921e',
+    identity: '0x8004A818BFB912233c491871b3d84c89A494BD9e',
+    reputation: '0x8004B663056A597Dffe9eCcC1965A193B7388713',
+    validation: '0x0000000000000000000000000000000000000000',
   },
 };
 
@@ -79,6 +149,149 @@ export const NETWORK_INFO: Record<string, NetworkInfo> = {
     nativeCurrency: {
       name: 'Sepolia ETH',
       symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'base-mainnet': {
+    chainId: 8453,
+    name: 'Base Mainnet',
+    rpcUrl: process.env.BASE_MAINNET_RPC_URL || 'https://mainnet.base.org',
+    contracts: ERC8004_ADDRESSES['base-mainnet'],
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'polygon-mainnet': {
+    chainId: 137,
+    name: 'Polygon Mainnet',
+    rpcUrl: process.env.POLYGON_MAINNET_RPC_URL || 'https://polygon-rpc.com',
+    contracts: ERC8004_ADDRESSES['polygon-mainnet'],
+    nativeCurrency: {
+      name: 'MATIC',
+      symbol: 'MATIC',
+      decimals: 18,
+    },
+  },
+  'polygon-amoy': {
+    chainId: 80002,
+    name: 'Polygon Amoy Testnet',
+    rpcUrl: process.env.POLYGON_AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
+    contracts: ERC8004_ADDRESSES['polygon-amoy'],
+    nativeCurrency: {
+      name: 'MATIC',
+      symbol: 'MATIC',
+      decimals: 18,
+    },
+  },
+  'arbitrum-mainnet': {
+    chainId: 42161,
+    name: 'Arbitrum One',
+    rpcUrl: process.env.ARBITRUM_MAINNET_RPC_URL || 'https://arb1.arbitrum.io/rpc',
+    contracts: ERC8004_ADDRESSES['arbitrum-mainnet'],
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'arbitrum-testnet': {
+    chainId: 421614,
+    name: 'Arbitrum Sepolia Testnet',
+    rpcUrl: process.env.ARBITRUM_TESTNET_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc',
+    contracts: ERC8004_ADDRESSES['arbitrum-testnet'],
+    nativeCurrency: {
+      name: 'Sepolia ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'celo-mainnet': {
+    chainId: 42220,
+    name: 'Celo Mainnet',
+    rpcUrl: process.env.CELO_MAINNET_RPC_URL || 'https://forno.celo.org',
+    contracts: ERC8004_ADDRESSES['celo-mainnet'],
+    nativeCurrency: {
+      name: 'CELO',
+      symbol: 'CELO',
+      decimals: 18,
+    },
+  },
+  'celo-testnet': {
+    chainId: 44787,
+    name: 'Celo Alfajores Testnet',
+    rpcUrl: process.env.CELO_TESTNET_RPC_URL || 'https://alfajores-forno.celo.org',
+    contracts: ERC8004_ADDRESSES['celo-testnet'],
+    nativeCurrency: {
+      name: 'CELO',
+      symbol: 'CELO',
+      decimals: 18,
+    },
+  },
+  'gnosis-mainnet': {
+    chainId: 100,
+    name: 'Gnosis Chain',
+    rpcUrl: process.env.GNOSIS_MAINNET_RPC_URL || 'https://rpc.gnosischain.com',
+    contracts: ERC8004_ADDRESSES['gnosis-mainnet'],
+    nativeCurrency: {
+      name: 'xDAI',
+      symbol: 'xDAI',
+      decimals: 18,
+    },
+  },
+  'scroll-mainnet': {
+    chainId: 534352,
+    name: 'Scroll Mainnet',
+    rpcUrl: process.env.SCROLL_MAINNET_RPC_URL || 'https://rpc.scroll.io',
+    contracts: ERC8004_ADDRESSES['scroll-mainnet'],
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'scroll-testnet': {
+    chainId: 534351,
+    name: 'Scroll Sepolia Testnet',
+    rpcUrl: process.env.SCROLL_TESTNET_RPC_URL || 'https://sepolia-rpc.scroll.io',
+    contracts: ERC8004_ADDRESSES['scroll-testnet'],
+    nativeCurrency: {
+      name: 'Sepolia ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'taiko-mainnet': {
+    chainId: 167000,
+    name: 'Taiko Mainnet',
+    rpcUrl: process.env.TAIKO_MAINNET_RPC_URL || 'https://rpc.mainnet.taiko.xyz',
+    contracts: ERC8004_ADDRESSES['taiko-mainnet'],
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+  'monad-mainnet': {
+    chainId: Number(process.env.MONAD_MAINNET_CHAIN_ID),
+    name: 'Monad Mainnet',
+    rpcUrl: process.env.MONAD_MAINNET_RPC_URL || '',
+    contracts: ERC8004_ADDRESSES['monad-mainnet'],
+    nativeCurrency: {
+      name: 'MON',
+      symbol: 'MON',
+      decimals: 18,
+    },
+  },
+  'monad-testnet': {
+    chainId: Number(process.env.MONAD_TESTNET_CHAIN_ID),
+    name: 'Monad Testnet',
+    rpcUrl: process.env.MONAD_TESTNET_RPC_URL || '',
+    contracts: ERC8004_ADDRESSES['monad-testnet'],
+    nativeCurrency: {
+      name: 'MON',
+      symbol: 'MON',
       decimals: 18,
     },
   },
@@ -153,6 +366,17 @@ export const NETWORK_INFO: Record<string, NetworkInfo> = {
     name: 'BSC Testnet (Chapel)',
     rpcUrl: process.env.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.binance.org:8545',
     contracts: ERC8004_ADDRESSES['bsc-testnet'],
+    nativeCurrency: {
+      name: 'Binance Coin',
+      symbol: 'BNB',
+      decimals: 18,
+    },
+  },
+  'bsc-mainnet': {
+    chainId: 56,
+    name: 'BSC Mainnet',
+    rpcUrl: process.env.BSC_MAINNET_RPC_URL || 'https://bsc-dataseed.binance.org',
+    contracts: ERC8004_ADDRESSES['bsc-mainnet'],
     nativeCurrency: {
       name: 'Binance Coin',
       symbol: 'BNB',

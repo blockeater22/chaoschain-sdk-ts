@@ -15,12 +15,26 @@ import { ethers } from 'ethers';
 export enum NetworkConfig {
   ETHEREUM_MAINNET = 'ethereum-mainnet',
   ETHEREUM_SEPOLIA = 'ethereum-sepolia',
+  BASE_MAINNET = 'base-mainnet',
   BASE_SEPOLIA = 'base-sepolia',
+  POLYGON_MAINNET = 'polygon-mainnet',
+  POLYGON_AMOY = 'polygon-amoy',
+  ARBITRUM_MAINNET = 'arbitrum-mainnet',
+  ARBITRUM_TESTNET = 'arbitrum-testnet',
+  CELO_MAINNET = 'celo-mainnet',
+  CELO_TESTNET = 'celo-testnet',
+  GNOSIS_MAINNET = 'gnosis-mainnet',
+  SCROLL_MAINNET = 'scroll-mainnet',
+  SCROLL_TESTNET = 'scroll-testnet',
+  TAIKO_MAINNET = 'taiko-mainnet',
+  MONAD_MAINNET = 'monad-mainnet',
+  MONAD_TESTNET = 'monad-testnet',
   OPTIMISM_SEPOLIA = 'optimism-sepolia',
   LINEA_SEPOLIA = 'linea-sepolia',
   HEDERA_TESTNET = 'hedera-testnet',
   MODE_TESTNET = 'mode-testnet',
   ZEROG_TESTNET = '0g-testnet',
+  BSC_MAINNET = 'bsc-mainnet',
   BSC_TESTNET = 'bsc-testnet',
   LOCAL = 'local',
 }
@@ -579,6 +593,150 @@ export interface WorkflowStatus {
 }
 
 /**
+ * Gateway API error category.
+ */
+export type GatewayErrorCategory = 'transient' | 'permanent' | 'auth' | 'unknown';
+
+/**
+ * Gateway error details for classification and retries.
+ */
+export interface GatewayErrorInfo {
+  statusCode?: number;
+  category: GatewayErrorCategory;
+  retryable: boolean;
+  response?: Record<string, any>;
+}
+
+/**
+ * Gateway health response payload.
+ */
+export interface GatewayHealthResponse {
+  status: string;
+  timestamp?: number;
+}
+
+/**
+ * Gateway workflow progress response payload (snake_case).
+ */
+export interface GatewayWorkflowProgressResponse {
+  arweave_tx_id?: string;
+  arweave_confirmed?: boolean;
+  onchain_tx_hash?: string;
+  onchain_confirmed?: boolean;
+  onchain_block?: number;
+  score_tx_hash?: string;
+  commit_tx_hash?: string;
+  reveal_tx_hash?: string;
+}
+
+/**
+ * Gateway workflow error response payload.
+ */
+export interface GatewayWorkflowErrorResponse {
+  step?: string;
+  message?: string;
+  code?: string;
+}
+
+/**
+ * Gateway workflow response payload.
+ */
+export interface GatewayWorkflowResponse {
+  id: string;
+  type: WorkflowType;
+  state: WorkflowState;
+  step: string;
+  created_at: number;
+  updated_at: number;
+  progress?: GatewayWorkflowProgressResponse;
+  error?: GatewayWorkflowErrorResponse;
+}
+
+/**
+ * Gateway work submission request payload.
+ */
+export interface GatewayWorkSubmissionRequest {
+  studio_address: string;
+  epoch: number;
+  agent_address: string;
+  data_hash: string;
+  thread_root: string;
+  evidence_root: string;
+  evidence_content: string;
+  signer_address: string;
+}
+
+/**
+ * Gateway score submission request payload.
+ */
+export interface GatewayScoreSubmissionRequest {
+  studio_address: string;
+  epoch: number;
+  validator_address: string;
+  data_hash: string;
+  scores: number[];
+  signer_address: string;
+  mode: ScoreSubmissionMode;
+  worker_address?: string;
+  salt: string;
+}
+
+/**
+ * Gateway close epoch request payload.
+ */
+export interface GatewayCloseEpochRequest {
+  studio_address: string;
+  epoch: number;
+  signer_address: string;
+}
+
+/**
+ * Gateway list workflows response payload.
+ */
+export interface GatewayListWorkflowsResponse {
+  workflows: GatewayWorkflowResponse[];
+}
+
+/**
+ * Gateway auth mode.
+ */
+export type GatewayAuthMode = 'apiKey' | 'signature';
+
+/**
+ * Gateway signature auth input.
+ */
+export interface GatewaySignatureAuth {
+  /** Precomputed signature for the request (server validates against address + timestamp). */
+  address: string;
+  signature: string;
+  /** Optional Unix epoch in milliseconds; defaults to Date.now() when omitted. */
+  timestamp?: number;
+}
+
+/**
+ * Gateway auth configuration.
+ */
+export interface GatewayAuthConfig {
+  authMode?: GatewayAuthMode;
+  apiKey?: string;
+  signature?: GatewaySignatureAuth;
+}
+
+/**
+ * Gateway retry configuration.
+ */
+export interface GatewayRetryConfig {
+  /** Retries are disabled by default; enable explicitly for transient errors only. */
+  enabled?: boolean;
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffFactor?: number;
+  jitter?: boolean;
+  jitterRatio?: number;
+}
+
+/**
  * Gateway client configuration.
  */
 export interface GatewayClientConfig {
@@ -586,10 +744,28 @@ export interface GatewayClientConfig {
   gatewayUrl: string;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
+  /** Request timeout in milliseconds (alias of timeout) */
+  timeoutMs?: number;
+  /** Request timeout in seconds (alias of timeout) */
+  timeoutSeconds?: number;
   /** Maximum time to wait for workflow completion in milliseconds (default: 300000) */
   maxPollTime?: number;
+  /** Maximum time to wait for workflow completion in milliseconds (alias of maxPollTime) */
+  maxPollTimeMs?: number;
+  /** Maximum time to wait for workflow completion in seconds (alias of maxPollTime) */
+  maxPollTimeSeconds?: number;
   /** Interval between status polls in milliseconds (default: 2000) */
   pollInterval?: number;
+  /** Interval between status polls in milliseconds (alias of pollInterval) */
+  pollIntervalMs?: number;
+  /** Interval between status polls in seconds (alias of pollInterval) */
+  pollIntervalSeconds?: number;
+  /** Optional default headers merged into each request */
+  headers?: Record<string, string>;
+  /** Optional auth configuration */
+  auth?: GatewayAuthConfig;
+  /** Optional retry configuration (disabled by default) */
+  retry?: GatewayRetryConfig;
 }
 
 // ============================================================================
