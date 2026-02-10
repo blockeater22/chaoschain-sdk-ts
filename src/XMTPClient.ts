@@ -218,6 +218,77 @@ export class XMTPManager {
   }
 
   /**
+   * Compute thread root from message dicts (Python compute_thread_root parity).
+   * @param messages List of message-like objects (id, from, to, content, timestamp, parentIds)
+   */
+  computeThreadRootFromMessages(messages: Array<Record<string, any>>): string {
+    if (messages.length === 0) return ethers.ZeroHash;
+    const nodes = this.messagesToDKGNodes(messages);
+    return this.computeThreadRoot(nodes);
+  }
+
+  /**
+   * Convert message dicts to DKG nodes for thread root computation.
+   */
+  messagesToDKGNodes(messages: Array<Record<string, any>>): DKGNode[] {
+    const nodes: DKGNode[] = [];
+    for (const m of messages) {
+      const id = m.id ?? m.xmtp_msg_id ?? '';
+      const from = m.from ?? m.sender ?? '';
+      const content = m.content ?? {};
+      const ts = typeof m.timestamp === 'number' ? m.timestamp : Date.parse(m.timestamp) || 0;
+      const parentIds = Array.isArray(m.parentIds) ? m.parentIds : Array.isArray(m.parents) ? m.parents : [];
+      const payloadHash = ethers.keccak256(
+        ethers.toUtf8Bytes(typeof content === 'string' ? content : JSON.stringify(content))
+      );
+      nodes.push(
+        new DKGNode({
+          author: from,
+          sig: '',
+          ts,
+          xmtpMsgId: id,
+          artifactIds: [],
+          payloadHash,
+          parents: parentIds,
+          content: typeof content === 'string' ? content : JSON.stringify(content),
+          nodeType: m.messageType ?? m.message_type ?? 'message',
+        })
+      );
+    }
+    return nodes;
+  }
+
+  /**
+   * Verify causality of a thread (Python verify_thread_causality parity).
+   * Checks that parents exist and timestamps are monotonic along edges.
+   */
+  verifyThreadCausality(messages: Array<Record<string, any>>): boolean {
+    if (messages.length === 0) return true;
+    const idSet = new Set<string>();
+    for (const m of messages) {
+      const id = m.id ?? m.xmtp_msg_id ?? '';
+      if (id) idSet.add(id);
+    }
+    const tsById = new Map<string, number>();
+    for (const m of messages) {
+      const id = m.id ?? m.xmtp_msg_id ?? '';
+      const ts = typeof m.timestamp === 'number' ? m.timestamp : Date.parse(m.timestamp) || 0;
+      tsById.set(id, ts);
+    }
+    for (const m of messages) {
+      const parentIds = Array.isArray(m.parentIds) ? m.parentIds : Array.isArray(m.parents) ? m.parents : [];
+      for (const pid of parentIds) {
+        if (!idSet.has(pid)) return false;
+        const childId = m.id ?? m.xmtp_msg_id ?? '';
+        const parentTs = tsById.get(pid) ?? 0;
+        const childTs = tsById.get(childId) ?? 0;
+        if (childTs < parentTs) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Get all conversation (other-agent) addresses (Python get_all_conversations parity).
    */
   getConversationAddresses(): string[] {

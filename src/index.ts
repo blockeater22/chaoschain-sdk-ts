@@ -40,7 +40,7 @@ export { MandateManager } from './MandateManager';
 // ============================================================================
 export { GoogleAP2Integration } from './GoogleAP2Integration';
 export { A2AX402Extension } from './A2AX402Extension';
-// export { ProcessIntegrity } from './ProcessIntegrity'; // TODO: Fix export
+export { ProcessIntegrity } from './ProcessIntegrity';
 
 // ============================================================================
 // Protocol Integrations
@@ -100,6 +100,10 @@ export type {
   ChaosChainSDKConfig,
   WalletConfig,
 
+  // Type aliases (Python parity)
+  AgentID,
+  TransactionHash,
+
   // Agent Types
   AgentMetadata,
   AgentRegistration,
@@ -115,7 +119,7 @@ export type {
   // Payments
   X402PaymentParams,
   X402Payment,
-  // X402PaymentReceipt, // Use PaymentReceipt instead
+  PaymentProof,
 
   // Storage
   StorageProvider,
@@ -164,6 +168,13 @@ export {
   getContractAddresses,
   // SUPPORTED_NETWORKS // Not exported from networks.ts
 } from './utils/networks';
+
+export {
+  getStorageProvider,
+  getComputeProvider,
+  type StorageProviderName,
+  type ComputeProviderName,
+} from './utils/providers';
 
 export {
   IDENTITY_REGISTRY_ABI,

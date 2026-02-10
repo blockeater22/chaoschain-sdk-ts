@@ -69,6 +69,12 @@ export const AgentRoleSERVER = AgentRole.WORKER;
 /** @deprecated Use AgentRole.VERIFIER instead */
 export const AgentRoleVALIDATOR = AgentRole.VERIFIER;
 
+// Type aliases (Python SDK parity)
+/** ERC-8004 agent identifier (token ID) */
+export type AgentID = bigint;
+/** Blockchain transaction hash */
+export type TransactionHash = string;
+
 // ============================================================================
 // Contract Types
 // ============================================================================

@@ -654,6 +654,22 @@ export class ChaosChainSDK {
   }
 
   /**
+   * Compute thread root from message dicts (Python compute_thread_root parity).
+   */
+  computeThreadRoot(messages: Array<Record<string, any>>): string {
+    if (!this.xmtpManager) return '0x' + '0'.repeat(64);
+    return this.xmtpManager.computeThreadRootFromMessages(messages);
+  }
+
+  /**
+   * Verify causality of a thread (Python verify_thread_causality parity).
+   */
+  verifyThreadCausality(messages: Array<Record<string, any>>): boolean {
+    if (!this.xmtpManager) return false;
+    return this.xmtpManager.verifyThreadCausality(messages);
+  }
+
+  /**
    * Get clients who gave feedback
    */
   async getClients(agentId: bigint): Promise<string[]> {
