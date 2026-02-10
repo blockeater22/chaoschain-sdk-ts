@@ -25,6 +25,8 @@ import {
   UploadResult,
   UploadOptions,
   ComputeProvider,
+  EvidencePackage,
+  IntegrityProof,
 } from './types';
 import { PaymentMethod } from './types';
 import { getNetworkInfo, getContractAddresses, getSupportedNetworks } from './utils/networks';
@@ -32,6 +34,10 @@ import { ConfigurationError } from './exceptions';
 //
 import { GatewayClient } from './GatewayClient';
 import { StudioClient } from './StudioClient';
+import { VerifierAgent } from './VerifierAgent';
+import { StudioManager } from './StudioManager';
+import { XMTPManager } from './XMTPClient';
+import type { XMTPMessage } from './XMTPClient';
 import type { WorkflowStatus, ScoreSubmissionMode } from './types';
 
 /**
@@ -77,7 +83,6 @@ export class ChaosChainSDK {
   public studioManager?: StudioManager;
   public gatewayClient?: GatewayClient;
   public xmtpManager?: XMTPManager;
-  public mandateManager?: MandateManager;
 
   // Configuration
   public readonly agentName: string;
@@ -305,15 +310,26 @@ export class ChaosChainSDK {
 
     // Initialize protocol integrations
     this.verifierAgent = new VerifierAgent(this);
-    this.studioManager = new StudioManager(this);
-    this.mandateManager = new MandateManager(this);
-
-    // Initialize XMTP Manager (MVP mode - local storage)
+    // XMTP Manager before StudioManager so we can pass messenger
     this.xmtpManager = new XMTPManager(this);
+    this.studioManager = new StudioManager({
+      sdk: this,
+      messenger: {
+        sendMessage: async (params) => {
+          const { messageId } = await this.xmtpManager!.sendMessage(
+            params.toAgent,
+            { ...params.content, type: params.messageType },
+            [],
+            params.messageType
+          );
+          return messageId;
+        },
+      },
+    });
 
-    // Initialize Gateway Client (if URL provided)
-    if (config.gatewayUrl) {
-      this.gatewayClient = new GatewayClient(config.gatewayUrl);
+    // Initialize Gateway Client (if URL provided and not already set via gatewayConfig)
+    if (config.gatewayUrl && !this.gateway) {
+      this.gatewayClient = new GatewayClient({ gatewayUrl: config.gatewayUrl });
       console.log(`   Gateway: ${config.gatewayUrl}`);
     }
 
@@ -375,6 +391,53 @@ export class ChaosChainSDK {
    */
   getAgentId(): bigint | undefined {
     return this._agentId;
+  }
+
+  /**
+   * Get comprehensive SDK status (Python get_sdk_status parity).
+   */
+  getSdkStatus(): Record<string, any> {
+    return {
+      agent_name: this.agentName,
+      agent_domain: this.agentDomain,
+      agent_role: this.agentRole,
+      network: String(this.network),
+      wallet_address: this.walletManager.getAddress(),
+      agent_id: this._agentId != null ? this._agentId.toString() : null,
+      features: {
+        x402_enabled: !!this.x402PaymentManager,
+        process_integrity: !!this.processIntegrity,
+        payments: !!this.paymentManager,
+        storage: true,
+        ap2_integration: !!this.googleAP2,
+        x402_extension: !!this.a2aX402Extension,
+        mandates: !!this.mandateManager,
+      },
+      x402_enabled: !!this.x402PaymentManager,
+      payment_methods: this.paymentManager
+        ? this.paymentManager.getSupportedPaymentMethods()
+        : [],
+      chain_id: this.networkInfo?.chainId ?? undefined,
+    };
+  }
+
+  /**
+   * Get complete agent identity (Python get_agent_identity parity).
+   */
+  getAgentIdentity(): {
+    agentId: string | null;
+    agentName: string;
+    agentDomain: string;
+    walletAddress: string;
+    network: string;
+  } {
+    return {
+      agentId: this._agentId != null ? this._agentId.toString() : null,
+      agentName: this.agentName,
+      agentDomain: this.agentDomain,
+      walletAddress: this.walletManager.getAddress(),
+      network: String(this.network),
+    };
   }
 
   // ============================================================================
@@ -475,6 +538,119 @@ export class ChaosChainSDK {
     tag2: string = ethers.ZeroHash
   ) {
     return this.chaosAgent.getSummary(agentId, clientAddresses, tag1, tag2);
+  }
+
+  /**
+   * Get x402 payment summary (Python get_x402_payment_summary parity).
+   */
+  getX402PaymentSummary(): Record<string, any> {
+    if (!this.x402PaymentManager) {
+      return { error: 'x402 payment manager not available' };
+    }
+    try {
+      return this.x402PaymentManager.getPaymentStats();
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }
+
+  /**
+   * Get reputation feedback list (Python get_reputation parity).
+   */
+  async getReputation(
+    agentId?: bigint,
+    tag1?: string,
+    tag2?: string
+  ): Promise<Array<Record<string, any>>> {
+    const id = agentId ?? this._agentId;
+    if (id == null) return [];
+    const t1 = tag1 ?? ethers.ZeroHash;
+    const t2 = tag2 ?? ethers.ZeroHash;
+    const result = await this.chaosAgent.readAllFeedback(id, [], t1, t2, false);
+    const entries: Array<Record<string, any>> = [];
+    for (let i = 0; i < (result.clients?.length ?? 0); i++) {
+      entries.push({
+        client: result.clients![i],
+        feedbackIndex: result.feedbackIndexes?.[i]?.toString(),
+        score: result.scores?.[i],
+        tag1: result.tag1s?.[i],
+        tag2: result.tag2s?.[i],
+        isRevoked: result.revokedStatuses?.[i],
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Get reputation summary (Python get_reputation_summary parity).
+   */
+  async getReputationSummary(
+    agentId?: bigint,
+    clientAddresses?: string[],
+    tag1?: string,
+    tag2?: string
+  ): Promise<{ count: number; averageScore: number }> {
+    const id = agentId ?? this._agentId;
+    if (id == null) return { count: 0, averageScore: 0 };
+    const clients = clientAddresses ?? [];
+    const t1 = tag1 ?? ethers.ZeroHash;
+    const t2 = tag2 ?? ethers.ZeroHash;
+    const summary = await this.chaosAgent.getSummary(id, clients, t1, t2);
+    return {
+      count: Number(summary.count ?? 0),
+      averageScore: summary.averageScore ?? 0,
+    };
+  }
+
+  // ============================================================================
+  // XMTP / Messaging (Python send_message, get_messages, get_all_conversations)
+  // ============================================================================
+
+  /**
+   * Send message to another agent (Python send_message parity).
+   */
+  async sendMessage(
+    toAgent: string,
+    messageType: string,
+    content: Record<string, any>,
+    parentId?: string
+  ): Promise<string> {
+    if (!this.xmtpManager) {
+      throw new Error('XMTP not available. Ensure XMTPManager is initialized.');
+    }
+    const parentIds = parentId ? [parentId] : [];
+    const { messageId } = await this.xmtpManager.sendMessage(
+      toAgent,
+      { type: messageType, ...content },
+      parentIds,
+      messageType
+    );
+    return messageId;
+  }
+
+  /**
+   * Get messages from a specific agent (Python get_messages parity).
+   */
+  getMessages(fromAgent: string, _forceRefresh?: boolean): Array<Record<string, any>> {
+    if (!this.xmtpManager) return [];
+    const thread = this.xmtpManager.getThread(fromAgent);
+    return (thread.messages || []).map((m: XMTPMessage) => ({
+      id: m.id,
+      from: m.from,
+      to: m.to,
+      content: m.content,
+      timestamp: m.timestamp,
+      parentIds: m.parentIds,
+      messageType: m.messageType,
+    }));
+  }
+
+  /**
+   * Get all conversation addresses (Python get_all_conversations parity).
+   */
+  getAllConversations(): string[] {
+    if (!this.xmtpManager) return [];
+    return this.xmtpManager.getConversationAddresses();
   }
 
   /**
@@ -851,6 +1027,74 @@ export class ChaosChainSDK {
     return result.cid;
   }
 
+  /**
+   * Retrieve evidence by CID (Python retrieve_evidence parity).
+   */
+  async retrieveEvidence(cid: string): Promise<Record<string, any> | null> {
+    try {
+      const data = await this.download(cid);
+      return typeof data === 'object' && data !== null ? data : { data };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Create evidence package for Proof of Agency (Python create_evidence_package parity).
+   */
+  async createEvidencePackage(params: {
+    taskId: string;
+    studioId: string;
+    workProof: Record<string, any>;
+    xmtpThreadId?: string;
+    participants?: Array<Record<string, any>>;
+    artifacts?: Array<Record<string, any>>;
+    integrityProof?: IntegrityProof | null;
+    paymentProofs?: Array<Record<string, any>>;
+    validationResults?: Array<Record<string, any>>;
+    storeOnIpfs?: boolean;
+  }): Promise<EvidencePackage> {
+    const packageId = `evidence_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const threadRoot = '0x' + '0'.repeat(64);
+    const evidenceRoot = '0x' + '0'.repeat(64);
+    const identity = this.getAgentIdentity();
+    const packageObj: EvidencePackage = {
+      packageId,
+      taskId: params.taskId,
+      studioId: params.studioId,
+      xmtpThreadId: params.xmtpThreadId ?? '',
+      threadRoot,
+      evidenceRoot,
+      participants: params.participants ?? [],
+      agentIdentity: identity,
+      workProof: params.workProof,
+      artifacts: params.artifacts ?? [],
+      integrityProof: params.integrityProof ?? null,
+      paymentProofs: params.paymentProofs ?? [],
+      validationResults: params.validationResults ?? [],
+      createdAt: new Date().toISOString(),
+    };
+    if (params.storeOnIpfs) {
+      const cid = await this.storeEvidence({
+        package_id: packageId,
+        task_id: params.taskId,
+        studio_id: params.studioId,
+        thread_root: threadRoot,
+        evidence_root: evidenceRoot,
+        participants: packageObj.participants,
+        agent_identity: identity,
+        work_proof: params.workProof,
+        artifacts: packageObj.artifacts,
+        integrity_proof: params.integrityProof ?? null,
+        payment_proofs: params.paymentProofs ?? [],
+        validation_results: params.validationResults ?? [],
+        created_at: packageObj.createdAt,
+      });
+      (packageObj as any).ipfsCid = cid;
+    }
+    return packageObj;
+  }
+
   // ============================================================================
   // Wallet & Network Methods
   // ============================================================================
@@ -860,6 +1104,21 @@ export class ChaosChainSDK {
    */
   getAddress(): string {
     return this.walletManager.getAddress();
+  }
+
+  /**
+   * Wallet address (Python wallet_address property parity).
+   */
+  get walletAddress(): string {
+    return this.getAddress();
+  }
+
+  /**
+   * Check if agent is registered on-chain (Python is_registered parity).
+   */
+  isRegistered(): boolean {
+    const id = this.getAgentId();
+    return id != null && id !== undefined;
   }
 
   /**
@@ -913,6 +1172,30 @@ export class ChaosChainSDK {
           ? (this.storageBackend as AutoStorageManager).getAvailableBackends()
           : [this.storageBackend.constructor.name],
     };
+  }
+
+  /**
+   * Convenience accessor for VerifierAgent (for tests and compatibility).
+   */
+  verifier(): VerifierAgent {
+    if (!this.verifierAgent) throw new Error('VerifierAgent not initialized');
+    return this.verifierAgent;
+  }
+
+  /**
+   * Convenience accessor for XMTPManager.
+   */
+  xmtp(): XMTPManager {
+    if (!this.xmtpManager) throw new Error('XMTPManager not initialized');
+    return this.xmtpManager;
+  }
+
+  /**
+   * Convenience accessor for MandateManager (optional; may be undefined if mandates-core not installed).
+   */
+  mandate(): MandateManager {
+    if (!this.mandateManager) throw new Error('MandateManager not available. Install mandates-core.');
+    return this.mandateManager;
   }
 
   /**
@@ -1106,5 +1389,135 @@ export class ChaosChainSDK {
    */
   async withdrawStudioRewards(studioAddress: string): Promise<string> {
     return this.studio.withdrawRewards(studioAddress);
+  }
+
+  // ============================================================================
+  // Studio direct work/score/epoch (Python parity; prefer Gateway in production)
+  // ============================================================================
+
+  /**
+   * Submit work directly to Studio (Python submit_work parity).
+   * @deprecated Use submitWorkViaGateway for production.
+   */
+  async submitWork(
+    studioAddress: string,
+    dataHash: string,
+    threadRoot: string,
+    evidenceRoot: string,
+    feedbackAuth?: string
+  ): Promise<string> {
+    return this.studio.submitWork(
+      studioAddress,
+      dataHash,
+      threadRoot,
+      evidenceRoot,
+      feedbackAuth ?? '0x'
+    );
+  }
+
+  /**
+   * Submit work with multi-agent attribution (Python submit_work_multi_agent parity).
+   * @deprecated Use Gateway for production.
+   */
+  async submitWorkMultiAgent(
+    studioAddress: string,
+    dataHash: string,
+    threadRoot: string,
+    evidenceRoot: string,
+    participants: string[],
+    contributionWeights: number[],
+    evidenceCID?: string
+  ): Promise<string> {
+    return this.studio.submitWorkMultiAgent(
+      studioAddress,
+      dataHash,
+      threadRoot,
+      evidenceRoot,
+      participants,
+      contributionWeights,
+      evidenceCID ?? ''
+    );
+  }
+
+  /**
+   * Commit score (commit-reveal phase 1) (Python commit_score parity).
+   */
+  async commitScore(
+    studioAddress: string,
+    dataHash: string,
+    commitment: string
+  ): Promise<string> {
+    return this.studio.commitScore(studioAddress, dataHash, commitment);
+  }
+
+  /**
+   * Reveal score (commit-reveal phase 2) (Python reveal_score parity).
+   */
+  async revealScore(
+    studioAddress: string,
+    dataHash: string,
+    scoreVector: string,
+    salt: string
+  ): Promise<string> {
+    return this.studio.revealScore(studioAddress, dataHash, scoreVector, salt);
+  }
+
+  /**
+   * Close epoch on Studio (Python close_epoch parity).
+   * @deprecated Use closeEpochViaGateway for production.
+   */
+  async closeEpoch(studioAddress: string, epoch: number): Promise<string> {
+    return this.studio.closeEpoch(studioAddress, epoch);
+  }
+
+  /**
+   * Submit score vector directly (used by VerifierAgent).
+   */
+  async submitScoreVector(params: {
+    studioAddress: string;
+    dataHash: string;
+    scoreVector: number[];
+  }): Promise<string> {
+    return this.studio.submitScoreVector(
+      params.studioAddress,
+      params.dataHash,
+      params.scoreVector
+    );
+  }
+
+  /**
+   * Submit score vector for a specific worker (used by VerifierAgent).
+   */
+  async submitScoreVectorForWorker(params: {
+    studioAddress: string;
+    dataHash: string;
+    workerAddress: string;
+    scoreVector: number[];
+  }): Promise<string> {
+    return this.studio.submitScoreVectorForWorker(
+      params.studioAddress,
+      params.dataHash,
+      params.workerAddress,
+      params.scoreVector
+    );
+  }
+
+  /**
+   * Submit work from verifier audit result (Python submit_work_from_audit parity).
+   */
+  async submitWorkFromAudit(
+    studioAddress: string,
+    auditResult: { dataHash: string; threadRoot: string; evidenceRoot: string; participants: string[]; contributionWeights: number[]; evidenceCid?: string },
+    evidenceCid?: string
+  ): Promise<string> {
+    return this.studio.submitWorkMultiAgent(
+      studioAddress,
+      auditResult.dataHash,
+      auditResult.threadRoot,
+      auditResult.evidenceRoot,
+      auditResult.participants,
+      auditResult.contributionWeights,
+      evidenceCid ?? auditResult.evidenceCid ?? ''
+    );
   }
 }

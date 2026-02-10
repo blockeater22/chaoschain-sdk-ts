@@ -218,6 +218,25 @@ export class XMTPManager {
   }
 
   /**
+   * Get all conversation (other-agent) addresses (Python get_all_conversations parity).
+   */
+  getConversationAddresses(): string[] {
+    const wallet = (this.sdk as any).walletManager.getWallet();
+    const myAddress = wallet.address.toLowerCase();
+    const out = new Set<string>();
+    for (const key of this.threads.keys()) {
+      const parts = key.split('_');
+      if (parts[0] === 'thread' && parts.length >= 3) {
+        const a = parts[1];
+        const b = parts[2];
+        if (a.toLowerCase() !== myAddress) out.add(a);
+        if (b.toLowerCase() !== myAddress) out.add(b);
+      }
+    }
+    return Array.from(out);
+  }
+
+  /**
    * Load messages from local storage
    */
   private loadMessages(): void {

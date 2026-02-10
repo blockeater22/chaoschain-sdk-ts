@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PaymentManager, PaymentMethod } from '../src/PaymentManager';
-import { NetworkConfig } from '../src/types';
+import { PaymentManager } from '../src/PaymentManager';
+import { NetworkConfig, PaymentMethod } from '../src/types';
 import { ethers } from 'ethers';
 import axios from 'axios';
 

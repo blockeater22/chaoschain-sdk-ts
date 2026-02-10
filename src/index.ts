@@ -46,10 +46,10 @@ export { A2AX402Extension } from './A2AX402Extension';
 // Protocol Integrations
 // ============================================================================
 export { VerifierAgent } from './VerifierAgent';
+export type { AuditResult } from './VerifierAgent';
 export { StudioManager } from './StudioManager';
-export { GatewayClient, WorkflowType, WorkflowState } from './GatewayClient';
+export { GatewayClient } from './GatewayClient';
 export { XMTPManager } from './XMTPClient';
-export { MandateManager } from './MandateManager';
 
 // ============================================================================
 // DKG (Decentralized Knowledge Graph)
@@ -82,15 +82,14 @@ export { IrysStorage as IrysStorageProvider } from './StorageBackends';
 export {
   ChaosChainSDKError,
   AgentRegistrationError,
-  //FeedbackSubmissionError, // Not defined yet
+  ValidationError,
   ValidationError as SDKValidationError,
   PaymentError,
   StorageError,
   ContractError,
   ConfigurationError,
   IntegrityVerificationError,
-  // WalletError, // Not defined yet
-  // NetworkError, // Not defined yet
+  NetworkError,
 } from './exceptions';
 
 // ============================================================================
@@ -132,42 +131,30 @@ export type {
   // Process Integrity
   IntegrityProof,
   TEEAttestation,
+  EvidencePackage,
 
   // Transaction
   TransactionResult,
-
-  // Protocol Types
-  WorkSubmissionParams,
-  MultiAgentWorkSubmissionParams,
-  ScoreVectorParams,
-  PerWorkerScoreVectorParams,
-  CloseEpochParams,
-  ConsensusResult,
-
-  // DKG Types
-  // DKG and DKGNode are exported as classes
 
   // Gateway Types
   WorkflowStatus,
   WorkflowProgress,
   WorkflowError,
-
-  // Studio Manager Types
-  Task,
-  TaskRequirements,
-  WorkerBid,
-
-  // Verifier Agent Types
-  AuditResult,
-
-  // Mandate Types
-  Mandate,
+  GatewayClientConfig,
 } from './types';
 
 // ============================================================================
 // Enums
 // ============================================================================
-export { NetworkConfig, AgentRole, ValidationStatus, PaymentMethod } from './types';
+export {
+  NetworkConfig,
+  AgentRole,
+  ValidationStatus,
+  PaymentMethod,
+  ScoreSubmissionMode,
+  WorkflowType,
+  WorkflowState,
+} from './types';
 
 // ============================================================================
 // Utilities
@@ -189,18 +176,10 @@ export {
   STUDIO_FACTORY_ABI,
 } from './utils/contracts';
 
-// Gateway Client
-export { GatewayClient } from './GatewayClient';
-
 // Studio Client (Direct On-Chain Operations)
 export { StudioClient } from './StudioClient';
 export type { StudioClientConfig } from './StudioClient';
-export { StudioManager } from './StudioManager';
 export type { Task, WorkerBid, StudioManagerConfig } from './StudioManager';
-
-// Workflow Types
-export { WorkflowType, WorkflowState } from './types';
-export type { WorkflowStatus, WorkflowProgress, WorkflowError, GatewayClientConfig } from './types';
 
 // Gateway Exceptions
 export {

@@ -26,7 +26,7 @@ describe('E2E Workflow', () => {
 
   it('should complete full workflow', async () => {
     // Step 1: Broadcast task
-    const taskId = sdk.studio().broadcastTask(
+    const taskId = await sdk.studioManager!.broadcastTask(
       studioAddress,
       {
         description: 'Analyze market data',
@@ -38,20 +38,20 @@ describe('E2E Workflow', () => {
     );
 
     expect(taskId).toBeDefined();
-    const task = sdk.studio().getTask(taskId);
+    const task = sdk.studioManager!.getTask(taskId);
     expect(task?.status).toBe('broadcasting');
 
     // Step 2: Send XMTP messages (simulate worker communication)
     const { messageId: msg1 } = await sdk
-      .xmtp()
+      .xmtpManager!
       .sendMessage('0xWorker1', { task: taskId, status: 'accepted' }, []);
 
     const { messageId: msg2 } = await sdk
-      .xmtp()
+      .xmtpManager!
       .sendMessage('0xWorker1', { task: taskId, result: 'analysis complete' }, [msg1]);
 
     // Step 3: Get thread and compute thread root
-    const thread = sdk.xmtp().getThread('0xWorker1');
+    const thread = sdk.xmtpManager!.getThread('0xWorker1');
     expect(thread.messages.length).toBeGreaterThan(0);
     expect(thread.threadRoot).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
@@ -81,7 +81,7 @@ describe('E2E Workflow', () => {
     // Step 5: Perform causal audit (mocked)
     vi.spyOn(sdk, 'download').mockResolvedValue(evidencePackage as any);
 
-    const auditResult = await sdk.verifier().performCausalAudit('QmTestEvidence', studioAddress);
+    const auditResult = await sdk.verifierAgent!.performCausalAudit('QmTestEvidence', studioAddress);
 
     expect(auditResult).toBeDefined();
     expect(auditResult.dataHash).toBeDefined();
@@ -109,7 +109,7 @@ describe('E2E Workflow', () => {
     const messages: string[] = [];
     for (const participant of participants) {
       const { messageId } = await sdk
-        .xmtp()
+        .xmtpManager!
         .sendMessage(
           participant,
           { contribution: 'analysis' },
@@ -119,7 +119,7 @@ describe('E2E Workflow', () => {
     }
 
     // Get thread
-    const thread = sdk.xmtp().getThread(participants[0]);
+    const thread = sdk.xmtpManager!.getThread(participants[0]);
     expect(thread.messages.length).toBeGreaterThan(0);
 
     // Compute contribution weights (would be done by VerifierAgent in real scenario)

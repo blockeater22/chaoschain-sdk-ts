@@ -56,6 +56,8 @@ export enum PaymentMethod {
  */
 export enum AgentRole {
   WORKER = 'worker',
+  /** @deprecated Use AgentRole.WORKER */
+  SERVER = 'server',
   VERIFIER = 'verifier',
   CLIENT = 'client',
   ORCHESTRATOR = 'orchestrator',
@@ -340,6 +342,34 @@ export interface IntegrityProof {
   teeProvider?: string; // e.g., "0g-compute", "phala"
   teeJobId?: string; //  TEE provider's job/task ID
   teeExecutionHash?: string; // TEE-specific execution hash
+}
+
+/**
+ * Evidence package for Proof of Agency (Python EvidencePackage parity).
+ */
+export interface EvidencePackage {
+  packageId: string;
+  taskId: string;
+  studioId: string;
+  xmtpThreadId?: string;
+  threadRoot: string;
+  evidenceRoot: string;
+  participants: Array<Record<string, any>>;
+  agentIdentity: {
+    agentId: string | null;
+    agentName: string;
+    agentDomain: string;
+    walletAddress: string;
+    network: string;
+  };
+  workProof: Record<string, any>;
+  artifacts: Array<Record<string, any>>;
+  integrityProof?: IntegrityProof | null;
+  paymentProofs?: Array<Record<string, any>>;
+  validationResults?: Array<Record<string, any>>;
+  dkgExport?: Record<string, any> | null;
+  ipfsCid?: string;
+  createdAt?: string;
 }
 
 // ============================================================================

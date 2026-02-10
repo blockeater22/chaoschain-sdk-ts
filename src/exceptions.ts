@@ -82,17 +82,40 @@ export class ContractError extends ChaosChainSDKError {
 }
 
 /**
+ * Validation request/response error (Python ValidationError parity).
+ */
+export class ValidationError extends ChaosChainSDKError {
+  constructor(message: string, details?: Record<string, any>) {
+    super(message, details);
+    this.name = 'ValidationError';
+    Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}
+
+/**
  * Base error from Gateway API.
  */
 export class GatewayError extends ChaosChainSDKError {
   public readonly statusCode?: number;
   public readonly response?: Record<string, any>;
+  public readonly category?: string;
+  public readonly retryable?: boolean;
 
-  constructor(message: string, details?: { statusCode?: number; response?: Record<string, any> }) {
+  constructor(
+    message: string,
+    details?: {
+      statusCode?: number;
+      response?: Record<string, any>;
+      category?: string;
+      retryable?: boolean;
+    }
+  ) {
     super(message, details || {});
     this.name = 'GatewayError';
     this.statusCode = details?.statusCode;
     this.response = details?.response;
+    this.category = details?.category;
+    this.retryable = details?.retryable;
     Object.setPrototypeOf(this, GatewayError.prototype);
   }
 }

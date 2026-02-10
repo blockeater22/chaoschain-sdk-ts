@@ -100,6 +100,10 @@ export class StudioManager {
     return taskId;
   }
 
+  getTask(taskId: string): Task | undefined {
+    return this.activeTasks[taskId];
+  }
+
   async collectBids(taskId: string, timeoutSeconds = 300): Promise<WorkerBid[]> {
     if (!this.activeTasks[taskId]) {
       throw new ChaosChainSDKError(`Task ${taskId} not found`);

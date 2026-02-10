@@ -16,15 +16,15 @@ describe('StudioManager', () => {
       privateKey: '0x' + '1'.repeat(64),
     });
 
-    studio = sdk.studio();
+    studio = sdk.studioManager!;
   });
 
   it('should initialize StudioManager', () => {
     expect(studio).toBeInstanceOf(StudioManager);
   });
 
-  it('should broadcast task', () => {
-    const taskId = studio.broadcastTask(
+  it('should broadcast task', async () => {
+    const taskId = await studio.broadcastTask(
       '0x' + '1'.repeat(40),
       {
         description: 'Test task',
@@ -45,26 +45,26 @@ describe('StudioManager', () => {
     expect(task?.requirements.description).toBe('Test task');
   });
 
-  it('should get task by ID', () => {
-    const taskId = studio.broadcastTask('0x' + '1'.repeat(40), {
-      description: 'Test',
-      budget: 50.0,
-      deadline: new Date(),
-    });
+  it('should get task by ID', async () => {
+    const taskId = await studio.broadcastTask(
+      '0x' + '1'.repeat(40),
+      { description: 'Test', budget: 50.0, deadline: new Date() },
+      []
+    );
 
     const task = studio.getTask(taskId);
     expect(task).toBeDefined();
     expect(task?.taskId).toBe(taskId);
   });
 
-  it('should assign task to worker', () => {
-    const taskId = studio.broadcastTask('0x' + '1'.repeat(40), {
-      description: 'Test',
-      budget: 100.0,
-      deadline: new Date(),
-    });
+  it('should assign task to worker', async () => {
+    const taskId = await studio.broadcastTask(
+      '0x' + '1'.repeat(40),
+      { description: 'Test', budget: 100.0, deadline: new Date() },
+      []
+    );
 
-    const assignmentId = studio.assignTask(taskId, '0xWorker', 100.0);
+    const assignmentId = await studio.assignTask(taskId, '0xWorker', 100.0);
 
     expect(assignmentId).toBeDefined();
 
