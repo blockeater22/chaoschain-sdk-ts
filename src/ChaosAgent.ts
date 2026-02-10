@@ -4,27 +4,21 @@
  */
 
 import { ethers } from 'ethers';
-import {
-  AgentMetadata,
-  AgentRegistration,
-  FeedbackParams,
-  FeedbackRecord,
-  ValidationRequestParams,
-  ValidationRequest,
-  ValidationStatus,
-  ContractAddresses,
-} from './types';
+import { AgentMetadata, AgentRegistration, FeedbackParams, ContractAddresses } from './types';
 import {
   IDENTITY_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
   VALIDATION_REGISTRY_ABI,
 } from './utils/contracts';
+import path from 'path';
+import fs from 'fs';
 
 export class ChaosAgent {
   private identityContract: ethers.Contract;
   private reputationContract: ethers.Contract;
   private validationContract: ethers.Contract;
   private signer: ethers.Signer;
+  private _agentId: bigint | null = null;
 
   constructor(addresses: ContractAddresses, signer: ethers.Signer, _provider: ethers.Provider) {
     this.signer = signer;
@@ -83,6 +77,9 @@ export class ChaosAgent {
       throw new Error('Registered event not found');
     }
 
+    // Set agent ID in memory and cache
+    await this.setCachedAgentId(event.args.agentId);
+
     return {
       agentId: event.args.agentId,
       txHash: receipt.hash,
@@ -111,13 +108,13 @@ export class ChaosAgent {
       if (uri.startsWith('ipfs://')) {
         const cid = uri.substring(7);
         const response = await fetch(`https://ipfs.io/ipfs/${cid}`);
-        return (await response.json()) as AgentMetadata | null;
+        return response.json() as Promise<AgentMetadata>;
       }
 
       // Parse https:// URI
       if (uri.startsWith('https://') || uri.startsWith('http://')) {
         const response = await fetch(uri);
-        return (await response.json()) as AgentMetadata | null;
+        return response.json() as Promise<AgentMetadata>;
       }
 
       return null;
@@ -166,6 +163,94 @@ export class ChaosAgent {
   }
 
   /**
+   * Get the agent's on-chain ID (ERC-8004) with optional local caching.
+   *
+   * @param useCache - If true, check local cache first (default: true)
+   * @returns Agent ID if registered, null otherwise
+   */
+  async getAgentId(useCache: boolean = true): Promise<bigint | null> {
+    // 1. Check memory first
+    if (this._agentId !== null) return this._agentId;
+
+    // 2. Check chain info for cache lookup
+    const network = await this.signer.provider!.getNetwork();
+    const chainId = Number(network.chainId);
+    const walletAddress = await this.signer.getAddress();
+
+    // 3. Check cache if enabled
+    if (useCache) {
+      const cachedId = this.loadAgentIdFromCache(chainId, walletAddress);
+      if (cachedId !== null) {
+        this._agentId = cachedId;
+        console.log('Agent ID loaded from cache:', cachedId);
+        return cachedId;
+      }
+    }
+
+    // 4. Query on-chain
+    try {
+      const balance: bigint = await this.identityContract.balanceOf(walletAddress);
+      if (balance === 0n) {
+        return null; // No agents owned
+      }
+
+      // 5. Try ERC-721 Enumerable first
+      try {
+        const agentId: bigint = await this.identityContract.tokenOfOwnerByIndex(walletAddress, 0);
+        this._agentId = agentId;
+        this.saveAgentIdTocache(chainId, walletAddress, agentId);
+        return this._agentId;
+      } catch (error) {
+        // tokenOfOwnerByIndex not available, use fallback
+      }
+
+      // 6. Fallback: iterate through recent tokens
+      try {
+        const totalSupply: bigint = await this.identityContract.totalSupply();
+        const total = Number(totalSupply);
+        for (let i = total; i > Math.max(0, total - 100); i--) {
+          try {
+            const owner = await this.identityContract.ownerOf(BigInt(i));
+            if (owner.toLowerCase() === walletAddress.toLowerCase()) {
+              this._agentId = BigInt(i);
+              this.saveAgentIdTocache(chainId, walletAddress, this._agentId);
+              return this._agentId;
+            }
+          } catch {
+            continue; // token might not exist
+          }
+        }
+      } catch {
+        // totalSupply not available
+      }
+    } catch (error) {
+      console.error('Failed to get agent ID:', error);
+    }
+
+    return null;
+  }
+
+  /**
+   * Manually set the agent ID (useful when known from external source).
+   * Sets both in-memory state AND saves to cache.
+   *
+   * @param agentId - The ERC-8004 agent ID to cache
+   */
+  async setCachedAgentId(agentId: bigint): Promise<void> {
+    // Get chain info
+    const network = await this.signer.provider!.getNetwork();
+    const chainId = Number(network.chainId);
+    const walletAddress = await this.signer.getAddress();
+
+    // set in memory
+    this._agentId = agentId;
+
+    // Save to cache
+    this.saveAgentIdTocache(chainId, walletAddress, agentId);
+    console.log('Agent ID set and cached:', agentId);
+  }
+
+  /**
    * Transfer agent ownership
    */
   async transferAgent(agentId: bigint, to: string): Promise<string> {
@@ -198,6 +283,9 @@ export class ChaosAgent {
     expiry: bigint
   ): Promise<string> {
     try {
+      console.warn(
+        'generateFeedbackAuthorization is DEPRECATED. ERC-8004 Jan 2026 removed feedbackAuth.'
+      );
       // Get chain ID
       const network = await this.signer.provider!.getNetwork();
       const chainId = network.chainId;
@@ -241,9 +329,9 @@ export class ChaosAgent {
   }
 
   /**
-   * Give feedback to an agent (ERC-8004 v1.0)
+   * Give feedback to an agent (ERC-8004 Jan/Feb 2026)
    *
-   * @param params Feedback parameters including agentId, rating, feedbackUri, and optional auth
+   * @param params Feedback parameters including agentId, rating, feedbackUri, and optional metadata
    * @returns Transaction hash
    */
   async giveFeedback(params: FeedbackParams): Promise<string> {
@@ -254,27 +342,41 @@ export class ChaosAgent {
       throw new Error('Rating must be between 0 and 100');
     }
 
-    // ERC-8004 v1.0 requires: (agentId, score, tag1, tag2, feedbackUri, feedbackHash, feedbackAuth)
-    const score = rating; // 0-100
-    const tag1 = feedbackData?.tag1 || ethers.ZeroHash; // bytes32
-    const tag2 = feedbackData?.tag2 || ethers.ZeroHash; // bytes32
+    // ERC-8004 Feb 2026 requires:
+    // (agentId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash)
+    const tag1 = typeof feedbackData?.tag1 === 'string' ? feedbackData.tag1 : '';
+    const tag2 = typeof feedbackData?.tag2 === 'string' ? feedbackData.tag2 : '';
+    const endpoint = typeof feedbackData?.endpoint === 'string' ? feedbackData.endpoint : '';
+    const valueDecimals =
+      typeof feedbackData?.valueDecimals === 'number' ? feedbackData.valueDecimals : 0;
+    const rawValue =
+      typeof feedbackData?.value === 'bigint' || typeof feedbackData?.value === 'number'
+        ? feedbackData.value
+        : rating;
+    const value =
+      typeof rawValue === 'bigint'
+        ? rawValue
+        : BigInt(Math.round(rawValue * Math.pow(10, valueDecimals)));
 
     // Calculate feedback hash
-    const feedbackContent = feedbackData?.content || feedbackUri || '';
-    const feedbackHash = ethers.keccak256(ethers.toUtf8Bytes(String(feedbackContent)));
-
-    // Feedback auth (289 bytes: struct + signature)
-    // If not provided, use empty bytes (will work if no auth required or for self-feedback)
-    const feedbackAuth = feedbackData?.feedbackAuth || '0x';
+    const feedbackContent =
+      typeof feedbackData?.content === 'string' ? feedbackData.content : feedbackUri;
+    const feedbackHash =
+      typeof feedbackData?.feedbackHash === 'string'
+        ? feedbackData.feedbackHash.startsWith('0x')
+          ? feedbackData.feedbackHash
+          : ethers.id(feedbackData.feedbackHash)
+        : ethers.keccak256(ethers.toUtf8Bytes(feedbackContent));
 
     const tx = await this.reputationContract.giveFeedback(
       agentId,
-      score,
+      value,
+      valueDecimals,
       tag1,
       tag2,
+      endpoint,
       feedbackUri,
-      feedbackHash,
-      feedbackAuth
+      feedbackHash
     );
     const receipt = await tx.wait();
 
@@ -330,13 +432,19 @@ export class ChaosAgent {
     index: bigint
   ): Promise<{
     score: number;
+    value: bigint;
+    valueDecimals: number;
     tag1: string;
     tag2: string;
     isRevoked: boolean;
   }> {
     const feedback = await this.reputationContract.readFeedback(agentId, clientAddress, index);
+    const valueDecimals = Number(feedback.valueDecimals ?? 0);
+    const value = (feedback.value ?? feedback.score) as bigint;
     return {
-      score: Number(feedback.score),
+      score: Number(value) / Math.pow(10, valueDecimals),
+      value,
+      valueDecimals,
       tag1: feedback.tag1,
       tag2: feedback.tag2,
       isRevoked: feedback.isRevoked,
@@ -354,12 +462,14 @@ export class ChaosAgent {
   async readAllFeedback(
     agentId: bigint,
     clientAddresses: string[] = [],
-    tag1: string = ethers.ZeroHash,
-    tag2: string = ethers.ZeroHash,
+    tag1: string = '',
+    tag2: string = '',
     includeRevoked: boolean = false
   ): Promise<{
     clients: string[];
+    feedbackIndexes: bigint[];
     scores: number[];
+    valueDecimals: number[];
     tag1s: string[];
     tag2s: string[];
     revokedStatuses: boolean[];
@@ -371,9 +481,16 @@ export class ChaosAgent {
       tag2,
       includeRevoked
     );
+    const valueDecimals = (result.valueDecimals || []).map((v: bigint) => Number(v));
+    const values = (result.values || result.scores) as bigint[];
     return {
       clients: result.clients,
-      scores: result.scores.map((s: bigint) => Number(s)),
+      feedbackIndexes: result.feedbackIndexes || [],
+      scores: values.map((value: bigint, i: number) => {
+        const decimals = valueDecimals[i] || 0;
+        return Number(value) / Math.pow(10, decimals);
+      }),
+      valueDecimals,
       tag1s: result.tag1s,
       tag2s: result.tag2s,
       revokedStatuses: result.revokedStatuses,
@@ -390,16 +507,20 @@ export class ChaosAgent {
   async getSummary(
     agentId: bigint,
     clientAddresses: string[] = [],
-    tag1: string = ethers.ZeroHash,
-    tag2: string = ethers.ZeroHash
+    tag1: string = '',
+    tag2: string = ''
   ): Promise<{
     count: bigint;
     averageScore: number;
+    averageScoreDecimals: number;
   }> {
     const result = await this.reputationContract.getSummary(agentId, clientAddresses, tag1, tag2);
+    const averageScoreDecimals = Number(result.summaryValueDecimals ?? 0);
+    const summaryValue = (result.summaryValue ?? result.averageScore) as bigint;
     return {
       count: result.count,
-      averageScore: Number(result.averageScore),
+      averageScore: Number(summaryValue) / Math.pow(10, averageScoreDecimals),
+      averageScoreDecimals,
     };
   }
 
@@ -561,6 +682,38 @@ export class ChaosAgent {
    */
   async getValidationIdentityRegistry(): Promise<string> {
     return this.validationContract.getIdentityRegistry();
+  }
+
+  // ============================================================================
+  // Cache Implementation
+  // ============================================================================
+  private getCachedFilePath(): string {
+    return path.join(process.cwd(), 'chaoschain_agent_ids.json');
+  }
+
+  private loadAgentIdFromCache(chainId: number, wallet: string): bigint | null {
+    const cacheFile = this.getCachedFilePath();
+    if (!fs.existsSync(cacheFile)) return null;
+    const cacheData = fs.readFileSync(cacheFile, 'utf-8');
+    const cache = JSON.parse(cacheData);
+    return cache[chainId]?.[wallet]?.agentId || null;
+  }
+
+  private saveAgentIdTocache(
+    chainId: number,
+    wallet: string,
+    agentId: bigint,
+    domain?: string
+  ): void {
+    const cacheFile = this.getCachedFilePath();
+    const cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) : {};
+    cache[String(chainId)] = cache[String(chainId)] ?? {};
+    cache[String(chainId)][wallet.toLowerCase()] = {
+      agentId,
+      timestamp: new Date().toISOString(),
+      domain,
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2));
   }
 
   // ============================================================================

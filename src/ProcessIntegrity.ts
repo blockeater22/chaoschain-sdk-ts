@@ -12,7 +12,7 @@
  */
 
 import { createHash } from 'crypto';
-import { IntegrityProof, TEEAttestation } from './types';
+import { IntegrityProof, TEEAttestation, VerificationMethod } from './types';
 import { IntegrityVerificationError } from './exceptions';
 
 // Type for registered functions
@@ -22,7 +22,7 @@ export interface StorageProvider {
   uploadJson(data: any, filename: string): Promise<string>;
 }
 
-// TEEAttestation is imported from types.ts
+// TEEAttestation is imported from './types' - no duplicate definition needed
 
 export interface ComputeProvider {
   submit(task: any): Promise<string>;
@@ -54,7 +54,8 @@ export class ProcessIntegrity {
   private agentName: string;
   private storageManager: StorageProvider | null;
   private computeProvider: ComputeProvider | null;
-  private registeredFunctions: Map<string, RegisteredFunction>;
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  private registeredFunctions: Map<string, Function>;
   private functionHashes: Map<string, string>;
 
   constructor(
@@ -77,7 +78,8 @@ export class ProcessIntegrity {
   /**
    * Register a function for integrity checking.
    */
-  registerFunction(func: RegisteredFunction, functionName?: string): string {
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  registerFunction(func: Function, functionName?: string): string {
     const name = functionName || func.name;
 
     // Generate code hash
@@ -167,7 +169,8 @@ export class ProcessIntegrity {
   /**
    * Generate a hash of the function's code.
    */
-  private generateCodeHash(func: RegisteredFunction): string {
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  private generateCodeHash(func: Function): string {
     try {
       // Get function source code
       const sourceCode = func.toString();
@@ -187,7 +190,7 @@ export class ProcessIntegrity {
   private async getTeeAttestation(
     functionName: string,
     inputs: Record<string, any>,
-    result: any
+    _result: any
   ): Promise<TEEAttestation | null> {
     if (!this.computeProvider) {
       return null;
@@ -226,13 +229,17 @@ export class ProcessIntegrity {
             console.log(`   Execution Hash: ${computeResult.execution_hash}`);
             console.log(`   Verification: ${computeResult.verification_method.value}`);
 
-            // Match actual 0G Compute response structure
             return {
-              provider: '0g-compute' as const,
-              attestationData: JSON.stringify(attestationData),
-              publicKey: computeResult.execution_hash || '',
-              timestamp: Math.floor(Date.now() / 1000), // Unix timestamp
-            } as TEEAttestation;
+              jobId: jobId,
+              provider: '0g-compute',
+              executionHash: computeResult.execution_hash, // TEE execution ID
+              verificationMethod: computeResult.verification_method.value as VerificationMethod,
+              model: taskData.model,
+              attestationData: attestationData, // Full attestation proof
+              proof: computeResult.proof?.toString('hex'),
+              metadata: computeResult.metadata,
+              timestamp: new Date().toISOString(),
+            };
           } else {
             console.warn(`⚠️  Compute result failed: ${computeResult.error}`);
             return null;
@@ -280,19 +287,21 @@ export class ProcessIntegrity {
 
     const executionHash = createHash('sha256').update(JSON.stringify(executionData)).digest('hex');
 
-    // Build proof with optional TEE data
+    // Build proof with optional TEE data (camelCase to match types.ts)
     const proof: IntegrityProof = {
       proofId: proofId,
       functionName: functionName,
-      inputs: inputs || {},
-      outputs: this.serializeResult(result),
       codeHash: codeHash,
       executionHash: executionHash,
-      timestamp: Math.floor(executionTime.getTime() / 1000), // Convert Date to Unix timestamp
-      signature: '', // Will be signed if needed
+      timestamp: executionTime,
+      agentName: this.agentName,
+      verificationStatus: 'verified',
       ipfsCid: undefined,
       // TEE fields (if available)
-      teeAttestation: (teeAttestation as any) || undefined,
+      teeAttestation: teeAttestation || undefined,
+      teeProvider: teeAttestation?.provider,
+      teeJobId: teeAttestation?.jobId,
+      teeExecutionHash: teeAttestation?.executionHash,
     };
 
     const verificationLevel = teeAttestation ? 'local + TEE' : 'local';
@@ -308,6 +317,7 @@ export class ProcessIntegrity {
     if (!this.storageManager) return;
 
     try {
+      // JSON output uses snake_case for Python SDK compatibility
       const proofData = {
         type: 'chaoschain_process_integrity_proof_v2', // v2 includes TEE
         proof: {
@@ -315,14 +325,14 @@ export class ProcessIntegrity {
           function_name: proof.functionName,
           code_hash: proof.codeHash,
           execution_hash: proof.executionHash,
-          timestamp: new Date(proof.timestamp * 1000).toISOString(), // Convert Unix timestamp to ISO string
-          agent_name: this.agentName,
-          verification_status: 'verified',
+          timestamp: proof.timestamp.toISOString(),
+          agent_name: proof.agentName,
+          verification_status: proof.verificationStatus,
           // TEE attestation (if available)
           tee_attestation: proof.teeAttestation,
-          tee_provider: proof.teeAttestation?.provider,
-          tee_job_id: (proof.teeAttestation as any)?.job_id,
-          tee_execution_hash: (proof.teeAttestation as any)?.execution_hash,
+          tee_provider: proof.teeProvider,
+          tee_job_id: proof.teeJobId,
+          tee_execution_hash: proof.teeExecutionHash,
         },
         verification_layers: {
           local_code_hash: true,
@@ -336,7 +346,7 @@ export class ProcessIntegrity {
       const cid = await this.storageManager.uploadJson(proofData, filename);
 
       if (cid) {
-        // Note: ipfsCid is readonly in IntegrityProof interface, so we log it instead
+        proof.ipfsCid = cid;
         console.log(`📁 Process Integrity Proof stored on IPFS: ${cid}`);
         // The CID is already in proofData, which is what gets stored
       }
@@ -417,7 +427,7 @@ export class ProcessIntegrity {
  * Decorator for automatically registering functions with integrity checking.
  */
 export function integrityCheckedFunction(verifier?: ProcessIntegrity) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (_target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {

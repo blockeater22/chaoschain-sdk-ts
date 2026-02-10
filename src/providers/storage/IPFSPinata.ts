@@ -86,6 +86,7 @@ export class PinataStorage implements StorageProvider {
         cid,
         uri: `ipfs://${cid}`,
         size: response.data.PinSize,
+        timestamp: Date.now(),
       };
     } catch (error) {
       throw new Error(`Failed to upload to Pinata: ${(error as Error).message}`);

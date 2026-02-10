@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   NetworkConfig,
   AgentRole,
+  AgentRoleSERVER,
+  AgentRoleVALIDATOR,
   AgentMetadata,
   StorageProvider,
   ComputeProvider,
@@ -12,6 +14,7 @@ import {
   FeedbackRecord,
   ValidationRequest,
   ValidationRequestParams,
+  VerificationMethod,
 } from '../src/types';
 
 describe('Type Exports', () => {
@@ -51,20 +54,18 @@ describe('Type Exports', () => {
       expect(AgentRole).toBeDefined();
     });
 
-    it('should have SERVER role', () => {
-      expect(AgentRole.SERVER).toBe('server');
+    // DEPRECATED - now exported as separate const
+    it('should have SERVER role (deprecated)', () => {
+      expect(AgentRoleSERVER).toBe('worker');
     });
 
     it('should have CLIENT role', () => {
       expect(AgentRole.CLIENT).toBe('client');
     });
 
-    it('should have VALIDATOR role', () => {
-      expect(AgentRole.VALIDATOR).toBe('validator');
-    });
-
-    it('should have BOTH role', () => {
-      expect(AgentRole.BOTH).toBe('both');
+    // DEPRECATED - now exported as separate const
+    it('should have VALIDATOR role (deprecated)', () => {
+      expect(AgentRoleVALIDATOR).toBe('verifier');
     });
   });
 
@@ -73,14 +74,14 @@ describe('Type Exports', () => {
       const metadata: AgentMetadata = {
         name: 'TestAgent',
         domain: 'test.example.com',
-        role: AgentRole.SERVER,
+        role: AgentRole.WORKER,
         capabilities: ['analysis', 'verification'],
         version: '1.0.0',
       };
 
       expect(metadata.name).toBe('TestAgent');
       expect(metadata.domain).toBe('test.example.com');
-      expect(metadata.role).toBe(AgentRole.SERVER);
+      expect(metadata.role).toBe(AgentRole.WORKER);
       expect(metadata.capabilities).toEqual(['analysis', 'verification']);
       expect(metadata.version).toBe('1.0.0');
     });
@@ -101,7 +102,7 @@ describe('Type Exports', () => {
       const metadata: AgentMetadata = {
         name: 'TestAgent',
         domain: 'test.example.com',
-        role: AgentRole.SERVER,
+        role: AgentRole.WORKER,
       };
 
       // These should be optional
@@ -170,53 +171,66 @@ describe('Type Exports', () => {
       const proof: IntegrityProof = {
         proofId: 'proof-123',
         functionName: 'analyzeData',
-        inputs: { data: 'test' },
-        outputs: { result: 'analyzed' },
+        //inputs: { data: 'test' },
+        //outputs: { result: 'analyzed' },
         codeHash: '0x' + '1'.repeat(64),
         executionHash: '0x' + '2'.repeat(64),
-        timestamp: Date.now(),
-        signature: '0x' + '3'.repeat(130),
+        timestamp: new Date(),
+        agentName: 'TestAgent',
+        verificationStatus: 'verified',
+        //signature: '0x' + '3'.repeat(130),
       };
 
       expect(proof.proofId).toBe('proof-123');
       expect(proof.functionName).toBe('analyzeData');
       expect(proof.codeHash).toMatch(/^0x/);
       expect(proof.executionHash).toMatch(/^0x/);
-      expect(proof.signature).toMatch(/^0x/);
+      expect(proof.agentName).toBe('TestAgent');
+      expect(proof.verificationStatus).toBe('verified');
     });
 
     it('should support TEE attestation', () => {
       const teeAttestation: TEEAttestation = {
+        jobId: 'job-123',
         provider: 'phala',
+        executionHash: '0xhash',
+        verificationMethod: 'tee-ml' as VerificationMethod,
         attestationData: '0x' + '2'.repeat(256),
-        publicKey: '0x' + '3'.repeat(128),
-        timestamp: Date.now(),
+        //publicKey: '0x' + '3'.repeat(128),
+        timestamp: new Date().toISOString(),
       };
 
       const proof: IntegrityProof = {
         proofId: 'proof-456',
         functionName: 'teeFunction',
-        inputs: {},
-        outputs: {},
+        //inputs: {},
+        //outputs: {},
         codeHash: '0x' + '5'.repeat(64),
         executionHash: '0x' + '6'.repeat(64),
-        timestamp: Date.now(),
-        signature: '0x' + '4'.repeat(130),
+        timestamp: new Date(),
+        agentName: 'TestAgent',
+        verificationStatus: 'verified',
+        //signature: '0x' + '4'.repeat(130),
         teeAttestation,
       };
 
       expect(proof.teeAttestation).toBeDefined();
       expect(proof.teeAttestation?.provider).toBe('phala');
+      expect(proof.teeAttestation?.attestationData).toMatch(/^0x/);
+      //expect(proof.teeAttestation?.publicKey).toMatch(/^0x/);
     });
   });
 
   describe('TEEAttestation Interface', () => {
     it('should support phala provider', () => {
       const attestation: TEEAttestation = {
+        jobId: 'job-123',
         provider: 'phala',
         attestationData: '0xdata',
-        publicKey: '0xkey',
-        timestamp: Date.now(),
+        verificationMethod: 'tee-ml' as VerificationMethod,
+        executionHash: '0xhash',
+        //publicKey: '0xkey',
+        timestamp: new Date().toISOString(),
       };
 
       expect(attestation.provider).toBe('phala');
@@ -224,10 +238,13 @@ describe('Type Exports', () => {
 
     it('should support sgx provider', () => {
       const attestation: TEEAttestation = {
+        jobId: 'job-123',
         provider: 'sgx',
         attestationData: '0xdata',
-        publicKey: '0xkey',
-        timestamp: Date.now(),
+        executionHash: '0xhash',
+        //publicKey: '0xkey',
+        verificationMethod: 'tee-ml' as VerificationMethod,
+        timestamp: new Date().toISOString(),
       };
 
       expect(attestation.provider).toBe('sgx');
@@ -235,10 +252,14 @@ describe('Type Exports', () => {
 
     it('should support nitro provider', () => {
       const attestation: TEEAttestation = {
+        jobId: 'job-123',
         provider: 'nitro',
+        executionHash: '0xhash',
+        verificationMethod: 'zk-ml' as VerificationMethod,
         attestationData: '0xdata',
-        publicKey: '0xkey',
-        timestamp: Date.now(),
+
+        //publicKey: '0xkey',
+        timestamp: new Date().toISOString(),
       };
 
       expect(attestation.provider).toBe('nitro');
@@ -350,8 +371,8 @@ describe('Type Exports', () => {
     });
 
     it('should enforce AgentRole type', () => {
-      const role: AgentRole = AgentRole.VALIDATOR;
-      expect(role).toBe('validator');
+      const role: AgentRole = AgentRole.VERIFIER;
+      expect(role).toBe('verifier');
     });
 
     it('should enforce bigint for agent IDs', () => {
@@ -372,6 +393,7 @@ describe('Type Exports', () => {
         cid: 'QmTest123',
         size: 1024,
         uri: 'ipfs://QmTest123',
+        timestamp: Date.now(),
       };
 
       expect(result.cid).toBe('QmTest123');

@@ -7,17 +7,8 @@
  * Based on: https://github.com/google-agentic-commerce/a2a-x402/blob/main/v0.1/spec.md
  */
 
-import { createHash } from 'crypto';
-import { NetworkConfig } from './types';
-
-export enum PaymentMethod {
-  BASIC_CARD = 'basic-card',
-  GOOGLE_PAY = 'https://google.com/pay',
-  APPLE_PAY = 'https://apple.com/apple-pay',
-  PAYPAL = 'https://paypal.com',
-  A2A_X402 = 'https://a2a.org/x402',
-}
-import { PaymentError } from './exceptions';
+import * as crypto from 'crypto';
+import { NetworkConfig, PaymentMethod } from './types';
 
 export interface X402PaymentMethod {
   supported_methods: string[];
@@ -106,7 +97,7 @@ export class A2AX402Extension {
 
     // 1. Basic Card Support (Visa, Mastercard, Amex, etc.)
     methods.push({
-      supported_methods: 'basic-card',
+      supported_methods: PaymentMethod.BASIC_CARD,
       data: {
         supportedNetworks: ['visa', 'mastercard', 'amex', 'discover'],
         supportedTypes: ['credit', 'debit'],
@@ -115,7 +106,7 @@ export class A2AX402Extension {
 
     // 2. Google Pay
     methods.push({
-      supported_methods: 'https://google.com/pay',
+      supported_methods: PaymentMethod.GOOGLE_PAY,
       data: {
         environment: 'PRODUCTION',
         apiVersion: 2,
@@ -134,7 +125,7 @@ export class A2AX402Extension {
 
     // 3. Apple Pay
     methods.push({
-      supported_methods: 'https://apple.com/apple-pay',
+      supported_methods: PaymentMethod.APPLE_PAY,
       data: {
         version: 3,
         merchantIdentifier: `merchant.chaoschain.${this.agentName.toLowerCase()}`,
@@ -145,7 +136,7 @@ export class A2AX402Extension {
 
     // 4. ChaosChain Crypto Pay (our A2A-x402 implementation)
     methods.push({
-      supported_methods: 'https://a2a.org/x402',
+      supported_methods: PaymentMethod.A2A_X402,
       data: {
         supportedCryptocurrencies: this.supportedCryptoMethods,
         supportedNetworks: this.supportedNetworks,
@@ -156,7 +147,7 @@ export class A2AX402Extension {
 
     // 5. PayPal (for completeness)
     methods.push({
-      supported_methods: 'https://paypal.com',
+      supported_methods: PaymentMethod.PAYPAL,
       data: {
         environment: 'sandbox',
         intent: 'capture',
@@ -281,18 +272,9 @@ export class A2AX402Extension {
     // Use the payment manager's traditional payment execution
     if (this.paymentManager) {
       // Convert to PaymentMethod enum
-      let methodEnum: PaymentMethod | undefined;
-      if (paymentMethod === 'basic-card') {
-        methodEnum = PaymentMethod.BASIC_CARD;
-      } else if (paymentMethod === 'https://google.com/pay') {
-        methodEnum = PaymentMethod.GOOGLE_PAY;
-      } else if (paymentMethod === 'https://apple.com/apple-pay') {
-        methodEnum = PaymentMethod.APPLE_PAY;
-      } else if (paymentMethod === 'https://paypal.com') {
-        methodEnum = PaymentMethod.PAYPAL;
-      } else if (paymentMethod === 'https://a2a.org/x402') {
-        methodEnum = PaymentMethod.A2A_X402;
-      }
+      const methodEnum = Object.values(PaymentMethod).find((m) => m === paymentMethod) as
+        | PaymentMethod
+        | undefined;
 
       if (methodEnum) {
         const result = this.paymentManager.executeTraditionalPayment(
@@ -361,7 +343,7 @@ export class A2AX402Extension {
 
     // Create proof hash
     const proofJson = JSON.stringify(proofData);
-    const proofHash = createHash('sha256').update(proofJson).digest('hex');
+    const proofHash = crypto.createHash('sha256').update(proofJson).digest('hex');
 
     return {
       proof_type: 'a2a_x402_payment',

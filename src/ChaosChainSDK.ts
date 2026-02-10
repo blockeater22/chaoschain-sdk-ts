@@ -13,6 +13,7 @@ import { GoogleAP2Integration, GoogleAP2IntegrationResult } from './GoogleAP2Int
 import { A2AX402Extension } from './A2AX402Extension';
 import { ProcessIntegrity } from './ProcessIntegrity';
 import { AutoStorageManager, StorageBackend } from './StorageBackends';
+import { MandateManager } from './MandateManager';
 // import { IPFSLocalStorage } from './providers/storage/IPFSLocal'; // Not used
 import {
   ChaosChainSDKConfig,
@@ -25,26 +26,13 @@ import {
   UploadOptions,
   ComputeProvider,
 } from './types';
-import { PaymentMethod } from './PaymentManager';
-import {
-  getNetworkInfo,
-  getContractAddresses,
-  getChaosChainProtocolAddresses,
-} from './utils/networks';
-import { STUDIO_PROXY_ABI, REWARDS_DISTRIBUTOR_ABI } from './utils/contracts';
-import {
-  WorkSubmissionParams,
-  MultiAgentWorkSubmissionParams,
-  ScoreVectorParams,
-  PerWorkerScoreVectorParams,
-  CloseEpochParams,
-  ConsensusResult,
-} from './types';
-import { VerifierAgent } from './VerifierAgent';
-import { StudioManager } from './StudioManager';
+import { PaymentMethod } from './types';
+import { getNetworkInfo, getContractAddresses, getSupportedNetworks } from './utils/networks';
+import { ConfigurationError } from './exceptions';
+//
 import { GatewayClient } from './GatewayClient';
-import { XMTPManager } from './XMTPClient';
-import { MandateManager } from './MandateManager';
+import { StudioClient } from './StudioClient';
+import type { WorkflowStatus, ScoreSubmissionMode } from './types';
 
 /**
  * Main ChaosChain SDK Class - Complete TypeScript implementation
@@ -61,6 +49,8 @@ import { MandateManager } from './MandateManager';
  * - HTTP 402 paywall server
  */
 export class ChaosChainSDK {
+  private static warnedGatewayMissing = false;
+  private static warnedStudioClientProduction = false;
   // Core components
   private walletManager: WalletManager;
   private chaosAgent: ChaosAgent;
@@ -74,6 +64,13 @@ export class ChaosChainSDK {
   public googleAP2?: GoogleAP2Integration;
   public a2aX402Extension?: A2AX402Extension;
   public processIntegrity?: ProcessIntegrity;
+  public mandateManager?: MandateManager;
+
+  // Gateway client for workflow submission (optional)
+  public gateway: GatewayClient | null = null;
+
+  // Studio client for direct on-chain operations
+  public studio: StudioClient;
 
   // Protocol integrations
   public verifierAgent?: VerifierAgent;
@@ -93,35 +90,101 @@ export class ChaosChainSDK {
   private _agentId?: bigint;
 
   constructor(config: ChaosChainSDKConfig) {
+    const signerSources = [config.privateKey, config.mnemonic, config.walletFile].filter(Boolean);
+    if (signerSources.length > 1) {
+      throw new ConfigurationError(
+        'Invalid wallet configuration: provide only one of privateKey, mnemonic, or walletFile.',
+        {
+          provided: signerSources.map((source) =>
+            typeof source === 'string' ? 'string' : 'unknown'
+          ),
+        }
+      );
+    }
+    if (signerSources.length === 0) {
+      throw new ConfigurationError(
+        'No signer configuration provided. Set privateKey, mnemonic, or walletFile to initialize the SDK.',
+        { required: ['privateKey', 'mnemonic', 'walletFile'] }
+      );
+    }
+
     this.agentName = config.agentName;
     this.agentDomain = config.agentDomain;
     this.agentRole = config.agentRole;
     this.network = config.network;
 
     // Get network info
-    this.networkInfo = getNetworkInfo(config.network);
+    if (!config.network) {
+      throw new ConfigurationError('Network is required to initialize the SDK.', {
+        required: 'network',
+      });
+    }
+    try {
+      this.networkInfo = getNetworkInfo(config.network);
+    } catch (error) {
+      throw new ConfigurationError(
+        `Unsupported network "${String(config.network)}".`,
+        {
+          supported: getSupportedNetworks(),
+          cause: (error as Error).message,
+        }
+      );
+    }
+    if (!this.networkInfo.chainId || Number.isNaN(this.networkInfo.chainId)) {
+      throw new ConfigurationError(
+        `Invalid chainId for network "${String(config.network)}".`,
+        { chainId: this.networkInfo.chainId }
+      );
+    }
 
     // Initialize provider
     const rpcUrl = config.rpcUrl || this.networkInfo.rpcUrl;
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    if (!rpcUrl || typeof rpcUrl !== 'string' || rpcUrl.trim().length === 0) {
+      throw new ConfigurationError(
+        `RPC URL is required for network "${String(config.network)}".`,
+        { network: config.network, hint: 'Provide rpcUrl in SDK config.' }
+      );
+    }
+    try {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    } catch (error) {
+      throw new ConfigurationError(
+        `Failed to initialize provider for network "${String(config.network)}".`,
+        { rpcUrl, cause: (error as Error).message }
+      );
+    }
 
     // Initialize wallet
-    this.walletManager = new WalletManager(
-      {
-        privateKey: config.privateKey,
-        mnemonic: config.mnemonic,
-        walletFile: config.walletFile,
-      },
-      this.provider
-    );
+    try {
+      this.walletManager = new WalletManager(
+        {
+          privateKey: config.privateKey,
+          mnemonic: config.mnemonic,
+          walletFile: config.walletFile,
+        },
+        this.provider
+      );
+    } catch (error) {
+      throw new ConfigurationError(
+        'Failed to initialize wallet. Check privateKey, mnemonic, or walletFile.',
+        { cause: (error as Error).message }
+      );
+    }
 
     // Initialize ChaosAgent (ERC-8004)
-    const contractAddresses = getContractAddresses(config.network);
-    this.chaosAgent = new ChaosAgent(
-      contractAddresses,
-      this.walletManager.getWallet(),
-      this.provider
-    );
+    try {
+      const contractAddresses = getContractAddresses(config.network);
+      this.chaosAgent = new ChaosAgent(
+        contractAddresses,
+        this.walletManager.getWallet(),
+        this.provider
+      );
+    } catch (error) {
+      throw new ConfigurationError(
+        `Failed to initialize ERC-8004 contracts for network "${String(config.network)}".`,
+        { network: config.network, cause: (error as Error).message }
+      );
+    }
 
     // Initialize storage provider
     if (config.storageProvider) {
@@ -184,17 +247,61 @@ export class ChaosChainSDK {
       );
     }
 
-    // Initialize Process Integrity (if enabled)
-    if (config.enableProcessIntegrity !== false) {
-      this.processIntegrity = new ProcessIntegrity(
+    // Initialize mandates-core (optional)
+    try {
+      this.mandateManager = new MandateManager(
         this.agentName,
-        this.storageBackend as any, // StorageBackend is compatible with StorageProvider interface
-        this.computeProvider as any // ComputeProvider types are compatible
+        this.walletManager,
+        this.networkInfo.chainId
       );
+    } catch (error) {
+      console.warn(`⚠️ MandateManager unavailable: ${String(error)}`);
+      this.mandateManager = undefined;
     }
 
     // Initialize compute provider (if provided)
     this.computeProvider = config.computeProvider;
+
+    // Initialize Process Integrity (if enabled)
+    if (config.enableProcessIntegrity !== false) {
+      this.processIntegrity = new ProcessIntegrity(
+        this.agentName,
+        this.storageBackend as any,
+        this.computeProvider as any
+      );
+    }
+
+    // Initialize Gateway client (if config provided)
+    if (config.gatewayConfig || config.gatewayUrl) {
+      const gatewayConfig = config.gatewayConfig || { gatewayUrl: config.gatewayUrl! };
+      this.gateway = new GatewayClient(gatewayConfig);
+      console.log(`🌐 Gateway client initialized: ${gatewayConfig.gatewayUrl}`);
+    }
+
+    // Initialize Studio client for direct on-chain operations
+    this.studio = new StudioClient({
+      provider: this.provider,
+      signer: this.walletManager.getWallet(),
+      network: typeof config.network === 'string' ? config.network : config.network,
+    });
+
+    const isLocalNetwork = String(config.network) === NetworkConfig.LOCAL || String(config.network) === 'local';
+    if (!this.gateway && !isLocalNetwork && !ChaosChainSDK.warnedGatewayMissing) {
+      console.warn(
+        '⚠️ Gateway is not configured. For production workflows, use gatewayConfig to enable Gateway orchestration.'
+      );
+      ChaosChainSDK.warnedGatewayMissing = true;
+    }
+    if (
+      process.env.NODE_ENV === 'production' &&
+      !isLocalNetwork &&
+      !ChaosChainSDK.warnedStudioClientProduction
+    ) {
+      console.warn(
+        '⚠️ StudioClient is intended for low-level or testing use. In production, prefer Gateway workflows.'
+      );
+      ChaosChainSDK.warnedStudioClientProduction = true;
+    }
 
     // Initialize protocol integrations
     this.verifierAgent = new VerifierAgent(this);
@@ -483,7 +590,7 @@ export class ChaosChainSDK {
     amount: number,
     currency: string = 'USDC',
     serviceDescription: string = 'AI Agent Service',
-    _expiryMinutes: number = 30
+    evidenceCid?: string
   ): Record<string, any> {
     if (!this.x402PaymentManager) {
       throw new Error('x402 payments not enabled');
@@ -492,7 +599,7 @@ export class ChaosChainSDK {
       amount,
       currency,
       serviceDescription,
-      '/' // resource parameter
+      evidenceCid
     );
   }
 
@@ -714,6 +821,7 @@ export class ChaosChainSDK {
     return {
       cid: result.cid,
       uri: result.url || `ipfs://${result.cid}`,
+      timestamp: Date.now(),
     };
   }
 
@@ -757,9 +865,8 @@ export class ChaosChainSDK {
   /**
    * Get wallet balance
    */
-  async getBalance(): Promise<string> {
-    const balance = await this.walletManager.getBalance();
-    return balance.toString();
+  async getBalance(): Promise<bigint> {
+    return this.walletManager.getBalance();
   }
 
   /**
@@ -797,7 +904,6 @@ export class ChaosChainSDK {
         process_integrity: !!this.processIntegrity,
         storage: true,
         compute: !!this.computeProvider,
-        protocol_integration: true,
       },
       supported_payment_methods: this.paymentManager
         ? this.paymentManager.getSupportedPaymentMethods()
@@ -809,505 +915,196 @@ export class ChaosChainSDK {
     };
   }
 
-  // ============================================================================
-  // ChaosChain Protocol Methods (Phase 1: Protocol Integration)
-  // ============================================================================
-
   /**
-   * Submit work to a StudioProxy (§1.4 protocol spec)
-   *
-   * @param params Work submission parameters
-   * @returns Transaction hash
-   *
-   * @example
-   * ```typescript
-   * const txHash = await sdk.submitWork({
-   *   studioAddress: "0x...",
-   *   dataHash: "0x...",
-   *   threadRoot: "0x...",
-   *   evidenceRoot: "0x..."
-   * });
-   * ```
+   * Check if Gateway is configured.
    */
-  async submitWork(params: WorkSubmissionParams): Promise<string> {
-    const agentId = this._agentId;
-    if (!agentId || agentId === 0n) {
-      throw new Error('Agent not registered. Call registerIdentity() first.');
-    }
-
-    const wallet = this.walletManager.getWallet();
-    const studioAddress = ethers.getAddress(params.studioAddress);
-
-    // Create StudioProxy contract instance
-    const studioProxy = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, wallet);
-
-    // ERC-8004 Jan 2026: feedbackAuth is now empty (permissionless feedback)
-    const feedbackAuth = '0x'; // Empty bytes
-
-    console.log(`→ Submitting work to studio ${studioAddress}`);
-    console.log(`   DataHash: ${params.dataHash.slice(0, 18)}...`);
-    console.log(`   ThreadRoot: ${params.threadRoot.slice(0, 18)}...`);
-    console.log(`   EvidenceRoot: ${params.evidenceRoot.slice(0, 18)}...`);
-
-    try {
-      const tx = await studioProxy.submitWork(
-        params.dataHash,
-        params.threadRoot,
-        params.evidenceRoot,
-        feedbackAuth,
-        { gasLimit: 500000 }
-      );
-
-      console.log(`→ Transaction sent: ${tx.hash}`);
-
-      const receipt = await tx.wait();
-      if (!receipt) {
-        throw new Error('Transaction receipt not found');
-      }
-
-      console.log(`✓ Work submitted successfully`);
-      return tx.hash;
-    } catch (error: any) {
-      throw new Error(`Failed to submit work: ${error.message}`);
-    }
+  isGatewayEnabled(): boolean {
+    return this.gateway !== null;
   }
 
   /**
-   * Submit work with multi-agent attribution (Protocol Spec §4.2)
-   *
-   * @param params Multi-agent work submission parameters
-   * @returns Transaction hash
-   *
-   * @example
-   * ```typescript
-   * const txHash = await sdk.submitWorkMultiAgent({
-   *   studioAddress: "0x...",
-   *   dataHash: "0x...",
-   *   threadRoot: "0x...",
-   *   evidenceRoot: "0x...",
-   *   participants: ["0xAlice...", "0xBob...", "0xCarol..."],
-   *   contributionWeights: [4500, 3500, 2000], // Basis points (sum = 10000)
-   *   evidenceCID: "Qm..."
-   * });
-   * ```
+   * Get Gateway client instance.
+   * @throws Error if Gateway is not configured
    */
-  async submitWorkMultiAgent(params: MultiAgentWorkSubmissionParams): Promise<string> {
-    const agentId = this._agentId;
-    if (!agentId || agentId === 0n) {
-      throw new Error('Agent not registered. Call registerIdentity() first.');
-    }
-
-    const wallet = this.walletManager.getWallet();
-    const studioAddress = ethers.getAddress(params.studioAddress);
-
-    // Normalize contribution weights to basis points (0-10000)
-    let weightsBp: number[];
-
-    if (Array.isArray(params.contributionWeights)) {
-      // List format: [float] or [int] (basis points)
-      const total = params.contributionWeights.reduce((a, b) => a + b, 0);
-
-      if (total <= 1.1) {
-        // Float weights (0-1 range) - convert to basis points
-        if (Math.abs(total - 1.0) > 1e-6) {
-          throw new Error(`Float contribution weights must sum to 1.0, got ${total}`);
-        }
-        weightsBp = params.contributionWeights.map((w) => Math.floor(w * 10000));
-      } else {
-        // Basis points (0-10000 range)
-        if (total !== 10000) {
-          console.warn(
-            `⚠️  Basis point weights sum to ${total}, expected 10000. Auto-normalizing...`
-          );
-          weightsBp = params.contributionWeights.map((w) => Math.floor((w * 10000) / total));
-        } else {
-          weightsBp = params.contributionWeights.map((w) => Math.floor(w));
-        }
-      }
-    } else {
-      // Dict format: {address: float_weight}
-      const total = Object.values(params.contributionWeights).reduce(
-        (a: number, b: number) => a + b,
-        0
-      );
-      if (Math.abs(total - 1.0) > 1e-6) {
-        throw new Error(`Dict contribution weights must sum to 1.0, got ${total}`);
-      }
-
-      // Validate participants match weights
-      for (const p of params.participants) {
-        if (!(p in params.contributionWeights)) {
-          throw new Error(`No contribution weight for participant ${p}`);
-        }
-      }
-
-      // Convert to basis points in participant order
-      weightsBp = params.participants.map((p) =>
-        Math.floor((params.contributionWeights as Record<string, number>)[p] * 10000)
+  getGateway(): GatewayClient {
+    if (!this.gateway) {
+      throw new ConfigurationError(
+        'Gateway is not configured. Provide gatewayConfig (or gatewayUrl) when constructing the SDK.',
+        { required: 'gatewayConfig' }
       );
     }
-
-    // Verify sum is 10000 (handle rounding)
-    const weightsSum = weightsBp.reduce((a, b) => a + b, 0);
-    if (weightsSum !== 10000) {
-      const diff = 10000 - weightsSum;
-      weightsBp[weightsBp.length - 1] += diff;
-    }
-
-    // Checksum addresses
-    const participantsChecksummed = params.participants.map((p) => ethers.getAddress(p));
-
-    // Create StudioProxy contract instance
-    const studioProxy = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, wallet);
-
-    console.log(`→ Submitting multi-agent work to studio ${studioAddress}`);
-    console.log(`   Participants: ${params.participants.length}`);
-    participantsChecksummed.forEach((p, i) => {
-      console.log(
-        `     ${i + 1}. ${p.slice(0, 10)}... → ${(weightsBp[i] / 100).toFixed(1)}% contribution`
-      );
-    });
-    console.log(`   DataHash: ${params.dataHash.slice(0, 18)}...`);
-    if (params.evidenceCID) {
-      console.log(`   Evidence: ipfs://${params.evidenceCID}`);
-    }
-
-    try {
-      const tx = await studioProxy.submitWorkMultiAgent(
-        params.dataHash,
-        params.threadRoot,
-        params.evidenceRoot,
-        participantsChecksummed,
-        weightsBp,
-        params.evidenceCID || '',
-        { gasLimit: 800000 }
-      );
-
-      console.log(`→ Transaction sent: ${tx.hash}`);
-
-      const receipt = await tx.wait();
-      if (!receipt) {
-        throw new Error('Transaction receipt not found');
-      }
-
-      console.log(`✓ Multi-agent work submitted successfully`);
-      console.log(`  Rewards will be distributed based on DKG contribution weights!`);
-      return tx.hash;
-    } catch (error: any) {
-      throw new Error(`Failed to submit multi-agent work: ${error.message}`);
-    }
+    return this.gateway;
   }
 
   /**
-   * Submit score vector for validation
+   * Submit work via Gateway.
    *
-   * @param params Score vector parameters
-   * @returns Transaction hash
-   *
-   * @example
-   * ```typescript
-   * const txHash = await sdk.submitScoreVector({
-   *   studioAddress: "0x...",
-   *   dataHash: "0x...",
-   *   scoreVector: [85, 90, 88, 95, 82] // Multi-dimensional PoA scores
-   * });
-   * ```
+   * The Gateway handles XMTP, DKG, Arweave archival, and on-chain submission.
    */
-  async submitScoreVector(params: ScoreVectorParams): Promise<string> {
-    const agentId = this._agentId;
-    if (!agentId || agentId === 0n) {
-      throw new Error('Agent not registered. Call registerIdentity() first.');
-    }
-
-    const wallet = this.walletManager.getWallet();
-    const studioAddress = ethers.getAddress(params.studioAddress);
-
-    // Create StudioProxy contract instance
-    const studioProxy = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, wallet);
-
-    // Ensure we have exactly 5 scores (pad with 0 if needed)
-    const scoresPadded = [...params.scoreVector, 0, 0, 0, 0, 0].slice(0, 5);
-
-    // Convert to uint8 array and ABI encode as bytes
-    const scoresUint8 = scoresPadded.map((s) => Math.min(Math.max(Math.floor(s), 0), 100));
-
-    // ABI encode as 5 uint8s
-    const scoreBytes = ethers.AbiCoder.defaultAbiCoder().encode(
-      ['uint8', 'uint8', 'uint8', 'uint8', 'uint8'],
-      scoresUint8
-    );
-
-    console.log(`📊 Submitting score vector to Studio ${studioAddress.slice(0, 10)}...`);
-    console.log(`   Data Hash: ${params.dataHash.slice(0, 16)}...`);
-    console.log(`   Scores: ${scoresUint8}`);
-
-    try {
-      const tx = await studioProxy.submitScoreVector(params.dataHash, scoreBytes, {
-        gasLimit: 250000,
-      });
-
-      console.log(`→ Transaction sent: ${tx.hash}`);
-
-      const receipt = await tx.wait();
-      if (!receipt) {
-        throw new Error('Transaction receipt not found');
-      }
-
-      console.log(`✓ Score vector submitted successfully`);
-      return tx.hash;
-    } catch (error: any) {
-      throw new Error(`Failed to submit score vector: ${error.message}`);
-    }
-  }
-
-  /**
-   * Submit score vector for a specific worker (multi-agent tasks)
-   *
-   * @param params Per-worker score vector parameters
-   * @returns Transaction hash
-   *
-   * @example
-   * ```typescript
-   * // Score Alice (high initiative = root node)
-   * await sdk.submitScoreVectorForWorker({
-   *   studioAddress: "0x...",
-   *   dataHash: "0x...",
-   *   workerAddress: "0xAlice...",
-   *   scoreVector: [85, 60, 70, 95, 80] // High initiative
-   * });
-   *
-   * // Score Bob (high collaboration = central node)
-   * await sdk.submitScoreVectorForWorker({
-   *   studioAddress: "0x...",
-   *   dataHash: "0x...",
-   *   workerAddress: "0xBob...",
-   *   scoreVector: [65, 90, 75, 95, 85] // High collaboration
-   * });
-   * ```
-   */
-  async submitScoreVectorForWorker(params: PerWorkerScoreVectorParams): Promise<string> {
-    const agentId = this._agentId;
-    if (!agentId || agentId === 0n) {
-      throw new Error('Agent not registered. Call registerIdentity() first.');
-    }
-
-    const wallet = this.walletManager.getWallet();
-    const studioAddress = ethers.getAddress(params.studioAddress);
-    const workerAddress = ethers.getAddress(params.workerAddress);
-
-    // Create StudioProxy contract instance
-    const studioProxy = new ethers.Contract(studioAddress, STUDIO_PROXY_ABI, wallet);
-
-    // Ensure we have exactly 5 scores (pad with 0 if needed)
-    const scoresPadded = [...params.scoreVector, 0, 0, 0, 0, 0].slice(0, 5);
-
-    // Convert to uint8 array and ABI encode as bytes
-    const scoresUint8 = scoresPadded.map((s) => Math.min(Math.max(Math.floor(s), 0), 100));
-
-    // ABI encode as 5 uint8s
-    const scoreBytes = ethers.AbiCoder.defaultAbiCoder().encode(
-      ['uint8', 'uint8', 'uint8', 'uint8', 'uint8'],
-      scoresUint8
-    );
-
-    console.log(`📊 Submitting per-worker score vector to Studio ${studioAddress.slice(0, 10)}...`);
-    console.log(`   Worker: ${workerAddress.slice(0, 10)}...`);
-    console.log(`   Data Hash: ${params.dataHash.slice(0, 16)}...`);
-    console.log(`   Scores: ${scoresUint8}`);
-
-    try {
-      const tx = await studioProxy.submitScoreVectorForWorker(
-        params.dataHash,
-        workerAddress,
-        scoreBytes,
-        { gasLimit: 250000 }
-      );
-
-      console.log(`→ Transaction sent: ${tx.hash}`);
-
-      const receipt = await tx.wait();
-      if (!receipt) {
-        throw new Error('Transaction receipt not found');
-      }
-
-      console.log(`✓ Per-worker score vector submitted successfully`);
-      return tx.hash;
-    } catch (error: any) {
-      throw new Error(`Failed to submit per-worker score vector: ${error.message}`);
-    }
-  }
-
-  /**
-   * Close an epoch and trigger reward distribution (§7.2 protocol spec)
-   *
-   * @param params Epoch closure parameters
-   * @returns Transaction hash
-   *
-   * @example
-   * ```typescript
-   * const txHash = await sdk.closeEpoch({
-   *   studioAddress: "0x...",
-   *   epoch: 1
-   * });
-   * ```
-   */
-  async closeEpoch(params: CloseEpochParams): Promise<string> {
-    const wallet = this.walletManager.getWallet();
-    const studioAddress = ethers.getAddress(params.studioAddress);
-
-    // Get RewardsDistributor address
-    let rewardsDistributorAddress: string;
-    if (params.rewardsDistributorAddress) {
-      rewardsDistributorAddress = ethers.getAddress(params.rewardsDistributorAddress);
-    } else {
-      const networkString = typeof this.network === 'string' ? this.network : String(this.network);
-      const protocolAddresses = getChaosChainProtocolAddresses(networkString);
-      if (!protocolAddresses) {
-        throw new Error(
-          'RewardsDistributor address not found. Please provide rewardsDistributorAddress parameter.'
-        );
-      }
-      rewardsDistributorAddress = protocolAddresses.rewardsDistributor;
-    }
-
-    // Create RewardsDistributor contract instance
-    const rewardsDistributor = new ethers.Contract(
-      rewardsDistributorAddress,
-      REWARDS_DISTRIBUTOR_ABI,
-      wallet
-    );
-
-    console.log(`→ Closing epoch ${params.epoch} for studio ${studioAddress}`);
-    console.log(`   RewardsDistributor: ${rewardsDistributorAddress}`);
-
-    try {
-      const tx = await rewardsDistributor.closeEpoch(studioAddress, params.epoch, {
-        gasLimit: 2000000,
-      });
-
-      console.log(`→ Transaction sent: ${tx.hash}`);
-
-      const receipt = await tx.wait();
-      if (!receipt) {
-        throw new Error('Transaction receipt not found');
-      }
-
-      console.log(`✓ Epoch closed successfully`);
-      return tx.hash;
-    } catch (error: any) {
-      throw new Error(`Failed to close epoch: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get consensus result for a work submission
-   *
-   * @param dataHash The work data hash
-   * @param rewardsDistributorAddress Optional RewardsDistributor address
-   * @returns Consensus result
-   */
-  async getConsensusResult(
+  async submitWorkViaGateway(
+    studioAddress: string,
+    epoch: number,
+    agentAddress: string,
     dataHash: string,
-    rewardsDistributorAddress?: string
-  ): Promise<ConsensusResult> {
-    const wallet = this.walletManager.getWallet();
-
-    // Get RewardsDistributor address
-    let distributorAddress: string;
-    if (rewardsDistributorAddress) {
-      distributorAddress = ethers.getAddress(rewardsDistributorAddress);
-    } else {
-      const networkString = typeof this.network === 'string' ? this.network : (this.network as NetworkConfig);
-      const protocolAddresses = getChaosChainProtocolAddresses(networkString);
-      if (!protocolAddresses) {
-        throw new Error(
-          'RewardsDistributor address not found. Please provide rewardsDistributorAddress parameter.'
-        );
-      }
-      distributorAddress = protocolAddresses.rewardsDistributor;
-    }
-
-    // Create RewardsDistributor contract instance
-    const rewardsDistributor = new ethers.Contract(
-      distributorAddress,
-      REWARDS_DISTRIBUTOR_ABI,
-      wallet
+    threadRoot: string,
+    evidenceRoot: string,
+    evidenceContent: Buffer | string,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().submitWork(
+      studioAddress,
+      epoch,
+      agentAddress,
+      dataHash,
+      threadRoot,
+      evidenceRoot,
+      evidenceContent,
+      signerAddress
     );
+  }
 
-    try {
-      const result = await rewardsDistributor.getConsensusResult(dataHash);
-
-      return {
-        dataHash: result.dataHash,
-        consensusScores: result.consensusScores.map((s: bigint) => Number(s)),
-        totalStake: result.totalStake,
-        validatorCount: Number(result.validatorCount),
-        timestamp: Number(result.timestamp),
-        finalized: result.finalized,
-      };
-    } catch (error: any) {
-      throw new Error(`Failed to get consensus result: ${error.message}`);
+  /**
+   * Submit score via Gateway.
+   */
+  async submitScoreViaGateway(
+    studioAddress: string,
+    epoch: number,
+    validatorAddress: string,
+    dataHash: string,
+    scores: number[],
+    signerAddress: string,
+    options?: {
+      workerAddress?: string;
+      salt?: string;
+      mode?: ScoreSubmissionMode;
     }
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().submitScore(
+      studioAddress,
+      epoch,
+      validatorAddress,
+      dataHash,
+      scores,
+      signerAddress,
+      options
+    );
+  }
+
+  /**
+   * Close epoch via Gateway.
+   * WARNING: This is economically final and cannot be undone.
+   */
+  async closeEpochViaGateway(
+    studioAddress: string,
+    epoch: number,
+    signerAddress: string
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().closeEpoch(studioAddress, epoch, signerAddress);
+  }
+
+  /**
+   * Wait for workflow completion.
+   */
+  async waitWorkflow(
+    workflowId: string,
+    options?: {
+      maxWait?: number;
+      pollInterval?: number;
+      onProgress?: (status: WorkflowStatus) => void;
+    }
+  ): Promise<WorkflowStatus> {
+    return this.getGateway().waitForCompletion(workflowId, options);
   }
 
   // ============================================================================
-  // Convenience Accessors for Protocol Integrations
+  // Mandates Core (optional)
   // ============================================================================
 
-  /**
-   * Get VerifierAgent instance
-   */
-  verifier(): VerifierAgent {
-    if (!this.verifierAgent) {
-      throw new Error('VerifierAgent not initialized');
-    }
-    return this.verifierAgent;
-  }
-
-  /**
-   * Get StudioManager instance
-   */
-  studio(): StudioManager {
-    if (!this.studioManager) {
-      throw new Error('StudioManager not initialized');
-    }
-    return this.studioManager;
-  }
-
-  /**
-   * Get GatewayClient instance
-   */
-  gateway(): GatewayClient {
-    if (!this.gatewayClient) {
-      throw new Error('Gateway not configured. Initialize SDK with gatewayUrl parameter.');
-    }
-    return this.gatewayClient;
-  }
-
-  /**
-   * Check if Gateway is configured
-   */
-  hasGateway(): boolean {
-    return !!this.gatewayClient;
-  }
-
-  /**
-   * Get XMTPManager instance
-   */
-  xmtp(): XMTPManager {
-    if (!this.xmtpManager) {
-      throw new Error('XMTPManager not initialized');
-    }
-    return this.xmtpManager;
-  }
-
-  /**
-   * Get MandateManager instance
-   */
-  mandate(): MandateManager {
+  buildMandateCore(kind: string, payload: Record<string, unknown>, baseUrl?: string) {
     if (!this.mandateManager) {
-      throw new Error('MandateManager not initialized');
+      throw new Error('MandateManager not available. Install mandates-core.');
     }
-    return this.mandateManager;
+    return this.mandateManager.buildCore(kind, payload, baseUrl);
+  }
+
+  createMandate(params: {
+    intent: string;
+    core: Record<string, unknown>;
+    deadline: string;
+    client: string;
+    server?: string;
+    version?: string;
+    mandateId?: string;
+    createdAt?: string;
+  }) {
+    if (!this.mandateManager) {
+      throw new Error('MandateManager not available. Install mandates-core.');
+    }
+    return this.mandateManager.createMandate(params);
+  }
+
+  signMandateAsServer(mandate: any, privateKey?: string) {
+    if (!this.mandateManager) {
+      throw new Error('MandateManager not available. Install mandates-core.');
+    }
+    return this.mandateManager.signAsServer(mandate, privateKey);
+  }
+
+  signMandateAsClient(mandate: any, privateKey: string) {
+    if (!this.mandateManager) {
+      throw new Error('MandateManager not available. Install mandates-core.');
+    }
+    return this.mandateManager.signAsClient(mandate, privateKey);
+  }
+
+  verifyMandate(mandate: any) {
+    if (!this.mandateManager) {
+      throw new Error('MandateManager not available. Install mandates-core.');
+    }
+    return this.mandateManager.verify(mandate);
+  }
+
+  // ============================================================================
+  // Studio Direct On-Chain Methods
+  // ============================================================================
+
+  /**
+   * Create a new Studio on ChaosChain.
+   * @see StudioClient.createStudio for full documentation
+   */
+  async createStudio(
+    name: string,
+    logicModuleAddress: string
+  ): Promise<{ proxyAddress: string; studioId: bigint }> {
+    return this.studio.createStudio(name, logicModuleAddress);
+  }
+
+  /**
+   * Register agent with a Studio.
+   * @see StudioClient.registerWithStudio for full documentation
+   */
+  async registerWithStudio(
+    studioAddress: string,
+    agentId: string,
+    role: number,
+    stakeAmount?: bigint
+  ): Promise<string> {
+    return this.studio.registerWithStudio(studioAddress, agentId, role, stakeAmount);
+  }
+
+  /**
+   * Get pending rewards for an account.
+   * @see StudioClient.getPendingRewards for full documentation
+   */
+  async getStudioPendingRewards(studioAddress: string, account: string): Promise<bigint> {
+    return this.studio.getPendingRewards(studioAddress, account);
+  }
+
+  /**
+   * Withdraw pending rewards from a Studio.
+   * @see StudioClient.withdrawRewards for full documentation
+   */
+  async withdrawStudioRewards(studioAddress: string): Promise<string> {
+    return this.studio.withdrawRewards(studioAddress);
   }
 }

@@ -55,6 +55,7 @@ export class IPFSLocalStorage implements StorageProvider {
         cid,
         uri: `ipfs://${cid}`,
         size: response.data.Size,
+        timestamp: Date.now(),
       };
     } catch (error) {
       throw new Error(`Failed to upload to IPFS: ${(error as Error).message}`);

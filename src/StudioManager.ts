@@ -1,49 +1,21 @@
-/**
- * Studio Manager for ChaosChain Task Assignment and Orchestration
- *
- * Implements Studio task workflow:
- * - Task broadcasting to registered workers
- * - Bid collection from workers
- * - Worker selection (reputation-based)
- * - Task assignment
- * - Work submission tracking
- */
-
 import { ChaosChainSDK } from './ChaosChainSDK';
-import { ChaosAgent } from './ChaosAgent';
+import { ChaosChainSDKError } from './exceptions';
 
-/**
- * Task definition
- */
 export interface Task {
   taskId: string;
   studioAddress: string;
-  requirements: TaskRequirements;
-  status: 'broadcasting' | 'assigned' | 'in_progress' | 'completed' | 'failed';
+  requirements: Record<string, any>;
+  status: string;
   createdAt: Date;
   assignedTo?: string;
   assignedAt?: Date;
 }
 
-/**
- * Task requirements
- */
-export interface TaskRequirements {
-  description: string;
-  budget: number; // USDC amount
-  deadline: Date;
-  capabilities?: string[];
-  minReputation?: number;
-}
-
-/**
- * Worker bid on a task
- */
 export interface WorkerBid {
   bidId: string;
   taskId: string;
   workerAddress: string;
-  workerAgentId: bigint;
+  workerAgentId: number;
   proposedPrice: number;
   estimatedTimeHours: number;
   capabilities: string[];
@@ -52,184 +24,239 @@ export interface WorkerBid {
   submittedAt: Date;
 }
 
-/**
- * Studio Manager for task orchestration
- */
+export interface StudioManagerConfig {
+  sdk: ChaosChainSDK;
+  messenger?: {
+    sendMessage: (params: {
+      toAgent: string;
+      messageType: string;
+      content: Record<string, any>;
+    }) => Promise<string>;
+  };
+}
+
 export class StudioManager {
   private sdk: ChaosChainSDK;
-  private chaosAgent: ChaosAgent;
-  private tasks: Map<string, Task>;
-  private bids: Map<string, WorkerBid[]>;
+  private messenger?: StudioManagerConfig['messenger'];
+  private activeTasks: Record<string, Task> = {};
+  private workerBids: Record<string, WorkerBid[]> = {};
 
-  constructor(sdk: ChaosChainSDK) {
-    this.sdk = sdk;
-    this.chaosAgent = (sdk as any).chaosAgent; // Access internal chaosAgent
-    this.tasks = new Map();
-    this.bids = new Map();
+  constructor(config: StudioManagerConfig) {
+    this.sdk = config.sdk;
+    this.messenger = config.messenger;
+
+    if (!this.messenger) {
+      console.warn(
+        `⚠️ XMTP not available for ${this.sdk.agentName}. Task broadcasting will be limited.`
+      );
+    }
   }
 
-  /**
-   * Get registered workers from StudioProxy
-   *
-   * Note: This would require StudioProxy ABI extension for getRegisteredWorkers()
-   * For now, returns empty array - would need contract method
-   */
-  async getRegisteredWorkers(studioAddress: string): Promise<string[]> {
-    // TODO: Implement when StudioProxy.getRegisteredWorkers() is available
-    console.warn('getRegisteredWorkers() not yet implemented - requires StudioProxy ABI extension');
+  getRegisteredWorkers(_studioAddress: string): string[] {
+    console.warn('⚠️ StudioProxy needs getRegisteredWorkers() method');
     return [];
   }
 
-  /**
-   * Broadcast task to registered workers
-   *
-   * @param studioAddress Studio contract address
-   * @param requirements Task requirements
-   * @param registeredWorkers List of worker addresses
-   * @returns Task ID
-   */
-  broadcastTask(
+  async broadcastTask(
     studioAddress: string,
-    requirements: TaskRequirements,
-    registeredWorkers: string[] = []
-  ): string {
-    const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    taskRequirements: Record<string, any>,
+    registeredWorkers: string[]
+  ): Promise<string> {
+    if (!this.messenger) {
+      throw new ChaosChainSDKError('XMTP not available. Provide a messenger adapter.');
+    }
 
+    const taskId = `task_${Math.random().toString(16).slice(2, 10)}`;
     const task: Task = {
       taskId,
       studioAddress,
-      requirements,
+      requirements: taskRequirements,
       status: 'broadcasting',
       createdAt: new Date(),
     };
 
-    this.tasks.set(taskId, task);
-    this.bids.set(taskId, []);
+    this.activeTasks[taskId] = task;
+    this.workerBids[taskId] = [];
 
-    console.log(`📢 Task ${taskId} broadcasted to ${registeredWorkers.length} workers`);
-    console.log(`   Budget: ${requirements.budget} USDC`);
-    console.log(`   Deadline: ${requirements.deadline.toISOString()}`);
+    console.log(`📢 Broadcasting task ${taskId} to ${registeredWorkers.length} workers...`);
+
+    for (const workerAddress of registeredWorkers) {
+      try {
+        await this.messenger.sendMessage({
+          toAgent: workerAddress,
+          messageType: 'task_broadcast',
+          content: {
+            task_id: taskId,
+            studio_address: studioAddress,
+            ...taskRequirements,
+          },
+        });
+        console.log(`✅ Sent to ${workerAddress.slice(0, 8)}...`);
+      } catch (error) {
+        console.warn(`⚠️ Failed to send to ${workerAddress.slice(0, 8)}...: ${String(error)}`);
+      }
+    }
 
     return taskId;
   }
 
-  /**
-   * Collect bids from workers (with timeout)
-   *
-   * @param taskId Task ID
-   * @param timeoutSeconds Timeout in seconds (default: 300 = 5 minutes)
-   * @returns Array of bids
-   */
-  async collectBids(taskId: string, timeoutSeconds: number = 300): Promise<WorkerBid[]> {
-    const task = this.tasks.get(taskId);
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
+  async collectBids(taskId: string, timeoutSeconds = 300): Promise<WorkerBid[]> {
+    if (!this.activeTasks[taskId]) {
+      throw new ChaosChainSDKError(`Task ${taskId} not found`);
     }
 
-    console.log(`⏳ Collecting bids for task ${taskId} (timeout: ${timeoutSeconds}s)...`);
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    console.log(`⏳ Collecting bids for ${timeoutSeconds}s...`);
 
-    // In a real implementation, this would listen for bid events or poll
-    // For now, return existing bids
-    const existingBids = this.bids.get(taskId) || [];
+    while (Date.now() < deadline) {
+      const bids = this.workerBids[taskId] || [];
+      if (bids.length >= 3) {
+        console.log(`✅ Received ${bids.length} bids`);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
 
-    // Simulate waiting (in real implementation, would wait for events)
-    await new Promise((resolve) => setTimeout(resolve, Math.min(timeoutSeconds * 1000, 5000)));
-
-    const bids = this.bids.get(taskId) || [];
-    console.log(`📥 Collected ${bids.length} bids`);
-
+    const bids = this.workerBids[taskId] || [];
+    if (bids.length === 0) {
+      console.warn('⚠️ No bids received');
+    } else {
+      this.displayBids(bids);
+    }
     return bids;
   }
 
-  /**
-   * Get worker reputations
-   *
-   * @param workerAddresses Array of worker addresses
-   * @returns Map of worker address to reputation score
-   */
-  async getWorkerReputations(workerAddresses: string[]): Promise<Record<string, number>> {
-    const reputations: Record<string, number> = {};
+  submitBid(
+    taskId: string,
+    workerAddress: string,
+    workerAgentId: number,
+    proposedPrice: number,
+    estimatedTimeHours: number,
+    capabilities: string[],
+    message = ''
+  ): string {
+    if (!this.activeTasks[taskId]) {
+      throw new ChaosChainSDKError(`Task ${taskId} not found`);
+    }
 
-    // Get agent IDs for workers
-    // Note: This would require resolving addresses to agent IDs
-    // For now, return default scores
+    const bid: WorkerBid = {
+      bidId: `bid_${Math.random().toString(16).slice(2, 10)}`,
+      taskId,
+      workerAddress,
+      workerAgentId,
+      proposedPrice,
+      estimatedTimeHours,
+      capabilities,
+      reputationScore: 0,
+      message,
+      submittedAt: new Date(),
+    };
+
+    this.workerBids[taskId] = this.workerBids[taskId] || [];
+    this.workerBids[taskId].push(bid);
+
+    console.log(`✅ Bid ${bid.bidId} submitted for task ${taskId}`);
+    return bid.bidId;
+  }
+
+  getWorkerReputations(workerAddresses: string[]): Record<string, number> {
+    const reputationScores: Record<string, number> = {};
     for (const address of workerAddresses) {
-      reputations[address] = 75; // Default reputation
+      reputationScores[address] = 75.0;
     }
-
-    return reputations;
+    return reputationScores;
   }
 
-  /**
-   * Select best worker based on bids and reputation
-   *
-   * @param bids Array of bids
-   * @param reputationScores Map of worker address to reputation score
-   * @returns Selected worker address
-   */
-  selectWorker(bids: WorkerBid[], reputationScores: Record<string, number>): string {
-    if (bids.length === 0) {
-      throw new Error('No bids to select from');
+  selectWorker(
+    bids: WorkerBid[],
+    reputationScores: Record<string, number>,
+    weights?: Record<string, number>
+  ): string {
+    if (!bids.length) {
+      throw new ChaosChainSDKError('No bids to select from');
     }
 
-    // Score each bid: reputation * 0.6 + (1/price) * 0.4
-    const scoredBids = bids.map((bid) => {
+    const weight = weights || {
+      reputation: 0.4,
+      price: 0.3,
+      time: 0.2,
+      capabilities: 0.1,
+    };
+
+    const maxPrice = Math.max(...bids.map((bid) => bid.proposedPrice));
+    const maxTime = Math.max(...bids.map((bid) => bid.estimatedTimeHours));
+    const maxReputation = Math.max(...Object.values(reputationScores));
+
+    let bestScore = -1;
+    let bestWorker = bids[0].workerAddress;
+
+    for (const bid of bids) {
       const reputation = reputationScores[bid.workerAddress] || 0;
-      const priceScore = bid.proposedPrice > 0 ? 100 / bid.proposedPrice : 0;
-      const score = reputation * 0.6 + priceScore * 0.4;
+      const normReputation = maxReputation > 0 ? reputation / maxReputation : 0;
+      const normPrice = maxPrice > 0 ? 1 - bid.proposedPrice / maxPrice : 1;
+      const normTime = maxTime > 0 ? 1 - bid.estimatedTimeHours / maxTime : 1;
+      const capabilityMatch = bid.capabilities.length / 10;
 
-      return { bid, score };
-    });
+      const score =
+        weight.reputation * normReputation +
+        weight.price * normPrice +
+        weight.time * normTime +
+        weight.capabilities * capabilityMatch;
 
-    // Sort by score (highest first)
-    scoredBids.sort((a, b) => b.score - a.score);
-
-    const selected = scoredBids[0].bid;
-    console.log(`✅ Selected worker: ${selected.workerAddress.slice(0, 10)}...`);
-    console.log(
-      `   Score: ${scoredBids[0].score.toFixed(2)}, Price: ${selected.proposedPrice} USDC`
-    );
-
-    return selected.workerAddress;
-  }
-
-  /**
-   * Assign task to worker
-   *
-   * @param taskId Task ID
-   * @param workerAddress Worker address
-   * @param budget Budget amount
-   * @returns Assignment ID
-   */
-  assignTask(taskId: string, workerAddress: string, budget: number): string {
-    const task = this.tasks.get(taskId);
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
+      if (score > bestScore) {
+        bestScore = score;
+        bestWorker = bid.workerAddress;
+      }
     }
 
+    console.log(`✅ Selected worker: ${bestWorker.slice(0, 8)}... (score=${bestScore.toFixed(2)})`);
+    return bestWorker;
+  }
+
+  async assignTask(taskId: string, workerAddress: string, budget: number): Promise<string> {
+    if (!this.activeTasks[taskId]) {
+      throw new ChaosChainSDKError(`Task ${taskId} not found`);
+    }
+
+    if (!this.messenger) {
+      throw new ChaosChainSDKError('XMTP not available. Provide a messenger adapter.');
+    }
+
+    const task = this.activeTasks[taskId];
     task.status = 'assigned';
     task.assignedTo = workerAddress;
     task.assignedAt = new Date();
 
-    const assignmentId = `assignment_${taskId}_${Date.now()}`;
+    const deadline =
+      task.requirements.deadline instanceof Date
+        ? task.requirements.deadline.toISOString()
+        : task.requirements.deadline || '';
 
-    console.log(`📋 Task ${taskId} assigned to ${workerAddress.slice(0, 10)}...`);
-    console.log(`   Budget: ${budget} USDC`);
+    const messageId = await this.messenger.sendMessage({
+      toAgent: workerAddress,
+      messageType: 'task_assignment',
+      content: {
+        task_id: taskId,
+        studio_address: task.studioAddress,
+        budget,
+        deadline,
+        requirements: task.requirements,
+      },
+    });
 
-    return assignmentId;
+    console.log(`✅ Task ${taskId} assigned to ${workerAddress.slice(0, 8)}...`);
+    return messageId;
   }
 
-  /**
-   * Get task by ID
-   */
-  getTask(taskId: string): Task | undefined {
-    return this.tasks.get(taskId);
-  }
-
-  /**
-   * Get bids for a task
-   */
-  getBids(taskId: string): WorkerBid[] {
-    return this.bids.get(taskId) || [];
+  private displayBids(bids: WorkerBid[]) {
+    console.log(
+      bids.map((bid) => ({
+        worker: `${bid.workerAddress.slice(0, 8)}...`,
+        price: bid.proposedPrice,
+        time: bid.estimatedTimeHours,
+        capabilities: bid.capabilities.slice(0, 3),
+        reputation: bid.reputationScore,
+      }))
+    );
   }
 }

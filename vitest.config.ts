@@ -7,18 +7,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/',
-        'dist/',
-        '**/*.test.ts',
-        '**/*.spec.ts',
-        '**/*.config.ts'
-      ]
+      exclude: ['node_modules/', 'dist/', '**/*.test.ts', '**/*.spec.ts', '**/*.config.ts'],
     },
-    // Resolve axios and other optional dependencies
-    deps: {
-      inline: ['axios']
-    }
-  }
+  },
 });
-

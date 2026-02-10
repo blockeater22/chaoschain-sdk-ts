@@ -130,7 +130,7 @@ export class WalletManager {
       const data = {
         address: this.wallet.address,
         privateKey: this.wallet.privateKey,
-        mnemonic: 'mnemonic' in this.wallet && this.wallet.mnemonic ? this.wallet.mnemonic.phrase : undefined,
+        mnemonic: 'mnemonic' in this.wallet ? this.wallet.mnemonic?.phrase : undefined,
         encrypted: false,
       };
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
@@ -162,7 +162,7 @@ export class WalletManager {
    * Get mnemonic phrase (if available)
    */
   getMnemonic(): string | undefined {
-    return 'mnemonic' in this.wallet && this.wallet.mnemonic ? this.wallet.mnemonic.phrase : undefined;
+    return 'mnemonic' in this.wallet ? this.wallet.mnemonic?.phrase : undefined;
   }
 
   /**

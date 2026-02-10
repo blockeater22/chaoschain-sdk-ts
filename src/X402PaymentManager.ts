@@ -7,6 +7,7 @@
  * Based on: https://www.x402.org/ and https://github.com/coinbase/x402
  */
 
+import * as crypto from 'crypto';
 import { ethers } from 'ethers';
 import { createHash } from 'crypto';
 import { PaymentError } from './exceptions';
@@ -151,7 +152,7 @@ export interface SettleResponse {
  * - ✅ ChaosChain Proof-of-Agency integration
  */
 export class X402PaymentManager {
-  private wallet: ethers.Wallet;
+  private wallet: ethers.Wallet | ethers.HDNodeWallet;
   private provider: ethers.JsonRpcProvider;
   private network: NetworkConfig;
   private treasuryAddress: string;
@@ -163,7 +164,7 @@ export class X402PaymentManager {
   private agentId?: string;
 
   constructor(
-    wallet: ethers.Wallet,
+    wallet: ethers.Wallet | ethers.HDNodeWallet,
     network: NetworkConfig,
     facilitatorConfig: X402FacilitatorConfig = {}
   ) {
@@ -577,6 +578,8 @@ export class X402PaymentManager {
     // USDC has 6 decimals
     const totalAmountWei = ethers.parseUnits(amount.toString(), 6);
     const feeWei = ethers.parseUnits(protocolFee.toString(), 6);
+    // Net amount: totalAmountWei - feeWei (used for recipient calculation)
+    void feeWei; // Fee is logged separately
 
     console.log(`💳 Preparing EIP-3009 payment authorization...`);
     console.log(`   Total: ${amount} USDC`);
@@ -689,18 +692,22 @@ export class X402PaymentManager {
   /**
    * Create payment requirements for receiving payments
    * Official x402 spec: https://github.com/coinbase/x402
+   * Aligned with Python SDK
    */
   createPaymentRequirements(
     amount: number,
     currency: string = 'USDC',
     serviceDescription: string = 'AI Agent Service',
-    resource: string = '/'
+    evidenceCid?: string
   ): X402PaymentRequirements {
     // Get USDC address for asset field
     const asset =
       currency === 'USDC'
         ? this.usdcAddresses[this.network]
         : '0x0000000000000000000000000000000000000000';
+
+    // Generate resource URL from service description (like Python SDK)
+    const resource = `/chaoschain/service/${serviceDescription.toLowerCase().replace(/ /g, '-')}`;
 
     // Official x402 paymentRequirements schema
     return {
@@ -709,18 +716,25 @@ export class X402PaymentManager {
       maxAmountRequired: ethers
         .parseUnits(amount.toString(), currency === 'USDC' ? 6 : 18)
         .toString(),
-      resource: resource,
+      resource,
       description: serviceDescription,
       mimeType: 'application/json',
       outputSchema: null,
       payTo: this.wallet.address,
-      maxTimeoutSeconds: 60,
+      maxTimeoutSeconds: 300, // 5 minutes (aligned with Python)
       asset: asset || '0x0000000000000000000000000000000000000000',
       extra:
         currency === 'USDC' && asset
           ? {
-              name: 'USD Coin',
+              name: 'USDC', // Aligned with Python SDK
               version: '2',
+              chaoschain_metadata: {
+                evidence_cid: evidenceCid || null,
+                timestamp: new Date().toISOString(),
+                network: this.network,
+                protocol_fee_percentage: this.protocolFeePercentage,
+                treasury_address: this.treasuryAddress,
+              },
             }
           : null,
     };

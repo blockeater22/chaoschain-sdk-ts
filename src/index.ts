@@ -33,6 +33,7 @@ export type {
 } from './X402PaymentManager';
 export { PaymentManager } from './PaymentManager';
 export { X402Server } from './X402Server';
+export { MandateManager } from './MandateManager';
 
 // ============================================================================
 // Advanced Integrations
@@ -81,8 +82,8 @@ export { IrysStorage as IrysStorageProvider } from './StorageBackends';
 export {
   ChaosChainSDKError,
   AgentRegistrationError,
-  // FeedbackSubmissionError, // Not defined yet
-  // ValidationError as SDKValidationError, // Not defined yet
+  //FeedbackSubmissionError, // Not defined yet
+  ValidationError as SDKValidationError,
   PaymentError,
   StorageError,
   ContractError,
@@ -166,21 +167,7 @@ export type {
 // ============================================================================
 // Enums
 // ============================================================================
-export {
-  NetworkConfig,
-  AgentRole,
-  ValidationStatus,
-  // PaymentMethod // Not defined in types.ts yet
-} from './types';
-
-// PaymentMethod enum for traditional + crypto payments
-export enum PaymentMethod {
-  BASIC_CARD = 'basic-card',
-  GOOGLE_PAY = 'https://google.com/pay',
-  APPLE_PAY = 'https://apple.com/apple-pay',
-  PAYPAL = 'https://paypal.com',
-  A2A_X402 = 'https://a2a.org/x402',
-}
+export { NetworkConfig, AgentRole, ValidationStatus, PaymentMethod } from './types';
 
 // ============================================================================
 // Utilities
@@ -195,15 +182,41 @@ export {
   IDENTITY_REGISTRY_ABI,
   REPUTATION_REGISTRY_ABI,
   VALIDATION_REGISTRY_ABI,
-  // getIdentityRegistryABI, // Now exported as const
-  // getReputationRegistryABI, // Now exported as const
-  // getValidationRegistryABI // Now exported as const
+  // ChaosChain Protocol ABIs
+  CHAOS_CORE_ABI,
+  STUDIO_PROXY_ABI,
+  REWARDS_DISTRIBUTOR_ABI,
+  STUDIO_FACTORY_ABI,
 } from './utils/contracts';
+
+// Gateway Client
+export { GatewayClient } from './GatewayClient';
+
+// Studio Client (Direct On-Chain Operations)
+export { StudioClient } from './StudioClient';
+export type { StudioClientConfig } from './StudioClient';
+export { StudioManager } from './StudioManager';
+export type { Task, WorkerBid, StudioManagerConfig } from './StudioManager';
+
+// Workflow Types
+export { WorkflowType, WorkflowState } from './types';
+export type { WorkflowStatus, WorkflowProgress, WorkflowError, GatewayClientConfig } from './types';
+
+// Gateway Exceptions
+export {
+  GatewayError,
+  GatewayConnectionError,
+  GatewayTimeoutError,
+  WorkflowFailedError,
+} from './exceptions';
+
+// Deprecated Types
+export type { XMTPMessageData, DKGNodeData } from './types';
 
 // ============================================================================
 // Version Info
 // ============================================================================
-export const SDK_VERSION = '0.1.3';
+export const SDK_VERSION = '0.2.0';
 export const ERC8004_VERSION = '1.0';
 export const X402_VERSION = '1.0';
 
